@@ -1,27 +1,65 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
 
-# 1
-app = FastAPI(
-    title="Median", openapi_url="/openapi.json"
+from app.core.middlewares import RateLimitingMiddleware
+from app.core.config import get_app_settings
+from app.core.exception import add_exception_handlers
+from app.core.logging import configure_logger
+
+from fastapi import APIRouter
+
+
+from app.api import (
+    article,
+    authentication,
+    comment,
+    health_check,
+    # profile,
+    tag,
+    user,
 )
 
-# 2
-api_router = APIRouter()
+router = APIRouter()
 
-# 3
-@api_router.get("/", status_code=200)
-def root() -> dict:
+router.include_router(
+    router=health_check.router, tags=["Healthy Check"], prefix="/health-check"
+)
+router.include_router(router=authentication.router, tags=["Authentication"], prefix="/users")
+router.include_router(router=user.router, tags=["User"], prefix="/user")
+# router.include_router(router=profile.router, tags=["Profiles"], prefix="/profiles")
+router.include_router(router=tag.router, tags=["Tags"], prefix="/tags")
+router.include_router(router=article.router, tags=["Articles"], prefix="/articles")
+router.include_router(router=comment.router, tags=["Comments"], prefix="/articles")
+
+
+def create_app() -> FastAPI:
     """
-    Root Get
+    Application factory, used to create application.
     """
-    return {"msg": "Hello, World!"}
+    settings = get_app_settings()
 
-# 4
-app.include_router(api_router)
+    application = FastAPI(**settings.fastapi_kwargs)
+
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.allowed_hosts,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    application.add_middleware(RateLimitingMiddleware)
+
+    application.include_router(router, prefix="/api")
+
+    add_exception_handlers(app=application)
+
+    configure_logger()
+
+    return application
 
 
-# 5
+app = create_app()
+
 if __name__ == "__main__":
-    # Use this for debugging purposes only
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="debug")
+    uvicorn.run(app)
