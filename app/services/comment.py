@@ -6,12 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.functions import count
 
 from app.core.exception import CommentNotFoundException
-from app.sqlmodel.alembic_model import Comment
-from app.schemas.comment import CreateCommentData as CreateCommentDTO, Comment as CommentSchema  # 导入 Pydantic 模型
-
+from app.sqlmodel.alembic_model import Comment, User # 导入 User 模型
+from app.schemas.comment import (
+    CreateCommentDTO,
+    CommentRecordDTO,  # 使用 CommentRecordDTO 替代 Comment
+    CommentDTO,        # 用于更丰富的评论DTO
+    CommentsListDTO    # 用于评论列表
+)
+from app.schemas.profile import ProfileDTO # 导入 ProfileDTO
 
 class CommentService:
-    """Service for Comment model, without DTO conversion."""
 
     async def add(
         self,
@@ -19,7 +23,7 @@ class CommentService:
         author_id: int,
         article_id: int,
         create_item: CreateCommentDTO,
-    ) -> Comment:
+    ) -> CommentRecordDTO: # 返回值改为 CommentRecordDTO
         query = (
             insert(Comment)
             .values(
@@ -32,27 +36,63 @@ class CommentService:
             .returning(Comment)
         )
         result = await session.execute(query)
-        return result.scalar_one()
+        # 将 SQLAlchemy 模型转换为 DTO
+        comment_record = result.scalar_one()
+        return CommentRecordDTO(
+            id=comment_record.id,
+            body=comment_record.body,
+            author_id=comment_record.author_id,
+            article_id=comment_record.article_id,
+            created_at=comment_record.created_at,
+            updated_at=comment_record.updated_at,
+        )
 
     async def get_or_none(
         self, session: AsyncSession, comment_id: int
-    ) -> Optional[Comment]:
+    ) -> Optional[CommentRecordDTO]: # 返回值改为 CommentRecordDTO
         query = select(Comment).where(Comment.id == comment_id)
-        return await session.scalar(query)
+        comment = await session.scalar(query)
+        if comment:
+            return CommentRecordDTO(
+                id=comment.id,
+                body=comment.body,
+                author_id=comment.author_id,
+                article_id=comment.article_id,
+                created_at=comment.created_at,
+                updated_at=comment.updated_at,
+            )
+        return None
 
-    async def get(self, session: AsyncSession, comment_id: int) -> Comment:
+    async def get(self, session: AsyncSession, comment_id: int) -> CommentRecordDTO: # 返回值改为 CommentRecordDTO
         query = select(Comment).where(Comment.id == comment_id)
         comment = await session.scalar(query)
         if not comment:
             raise CommentNotFoundException()
-        return comment
+        return CommentRecordDTO(
+            id=comment.id,
+            body=comment.body,
+            author_id=comment.author_id,
+            article_id=comment.article_id,
+            created_at=comment.created_at,
+            updated_at=comment.updated_at,
+        )
 
     async def list(
         self, session: AsyncSession, article_id: int
-    ) -> List[Comment]:
+    ) -> List[CommentRecordDTO]: # 返回值改为 List[CommentRecordDTO]
         query = select(Comment).where(Comment.article_id == article_id)
         comments = await session.scalars(query)
-        return list(comments)
+        return [
+            CommentRecordDTO(
+                id=c.id,
+                body=c.body,
+                author_id=c.author_id,
+                article_id=c.article_id,
+                created_at=c.created_at,
+                updated_at=c.updated_at,
+            )
+            for c in comments
+        ]
 
     async def delete(self, session: AsyncSession, comment_id: int) -> None:
         query = delete(Comment).where(Comment.id == comment_id)
@@ -63,31 +103,40 @@ class CommentService:
         result = await session.execute(query)
         return result.scalar_one()
 
-    async def get_comment_response(self, session: AsyncSession, comment: Comment) -> CommentSchema:
-        # 这里你需要查询关联的用户信息来构建 CommentSchema
-        from app.sqlmodel.alembic_model import User  # 避免循环导入
-
+    async def get_comment_response(self, session: AsyncSession, comment: Comment) -> CommentDTO:
+        """
+        根据 Comment SQLAlchemy 模型构建 CommentDTO。
+        """
+        # 查询关联的作者信息
         author = await session.scalar(select(User).where(User.id == comment.author_id))
         if not author:
-            # 处理找不到作者的情况，可以抛出异常或返回默认值
+            # 根据你的业务逻辑处理找不到作者的情况，这里抛出异常
             raise Exception(f"Author with id {comment.author_id} not found")
 
-        return CommentSchema(
-            id=comment.id,
-            createdAt=comment.created_at,
-            updatedAt=comment.updated_at,
-            body=comment.body,
-            author=CommentSchema.Author(
-                username=author.username,
-                bio=author.bio,
-                image=author.image_url,
-                following=False,  # 需要根据当前用户判断是否关注
-            ),
+        # 构建 ProfileDTO
+        profile_dto = ProfileDTO(
+            user_id=author.id,
+            username=author.username,
+            bio=author.bio,
+            image=author.image_url,
+            following=False,  # 此处 `following` 需要根据当前请求用户与作者的关系来判断
         )
 
-    async def list_comment_responses(self, session: AsyncSession, comments: List[Comment]) -> List[CommentSchema]:
-        comment_responses = []
+        # 构建 CommentDTO
+        return CommentDTO(
+            id=comment.id,
+            body=comment.body,
+            author=profile_dto,
+            createdAt=comment.created_at, # 注意这里是 createdAt 对应 DTO 中的 alias
+            updatedAt=comment.updated_at, # 注意这里是 updatedAt 对应 DTO 中的 alias
+        )
+
+    async def list_comments_response(self, session: AsyncSession, comments: List[Comment]) -> CommentsListDTO:
+        """
+        根据 Comment SQLAlchemy 模型列表构建 CommentsListDTO。
+        """
+        comment_dtos = []
         for comment in comments:
-            comment_response = await self.get_comment_response(session, comment)
-            comment_responses.append(comment_response)
-        return comment_responses
+            comment_dto = await self.get_comment_dto(session, comment)
+            comment_dtos.append(comment_dto)
+        return CommentsListDTO(comments=comment_dtos, commentsCount=len(comment_dtos))
