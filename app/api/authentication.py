@@ -1,46 +1,43 @@
-from typing import Annotated, AsyncGenerator
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 from app.schemas.user import (
-    UserLoginData,
-    UserRegistrationData,
-    UserResponse,
+    UserRegistrationRequest,
+    UserLoginRequest,
+    UserRegistrationResponse,
+    UserLoginResponse,
 )
-from app.services.auth_token import AuthTokenService
-from app.core.dep import get_db_session,get_AuthTokenService
-from app.schemas.user import UserResponse as UserSchema
+from app.services.auth import UserAuthService  # 正确的 service
+from app.core.dep import get_db_session,get_UserAuthService
 
 router = APIRouter()
 
 
-
-@router.post("", response_model=UserResponse)
+@router.post("", response_model=UserRegistrationResponse)
 async def register_user(
-    payload: UserRegistrationData,
- session:AsyncSession=Depends(get_db_session),
- user_auth_service:AuthTokenService=Depends(get_AuthTokenService)
-) -> UserResponse:
+    payload: UserRegistrationRequest,
+    session: AsyncSession = Depends(get_db_session),
+    user_auth_service: UserAuthService = Depends(get_UserAuthService),
+) -> UserRegistrationResponse:
     """
-    Process user registration.
+    用户注册
     """
-    
-    user = await user_auth_service.sign_up_user(session=session, user_to_create=payload)
-    user_response = await user_auth_service.get_user_response_with_token(session=session, user=user)
-    return UserResponse(user=user_response)
+    user_dto = await user_auth_service.sign_up_user(
+        session=session, user_to_create=payload.to_dto()
+    )
+    return UserRegistrationResponse.from_dto(user_dto)
 
 
-@router.post("/login", response_model=UserResponse)
+@router.post("/login", response_model=UserLoginResponse)
 async def login_user(
-    payload: UserLoginData,  
-      session:AsyncSession=Depends(get_db_session),
-       user_auth_service:AuthTokenService=Depends(get_AuthTokenService)
-) -> UserResponse:
+    payload: UserLoginRequest,
+    session: AsyncSession = Depends(get_db_session),
+    user_auth_service: UserAuthService = Depends(get_UserAuthService),
+) -> UserLoginResponse:
     """
-    Process user login.
+    用户登录
     """
-    user = await user_auth_service.sign_in_user(session=session, user_to_login=payload)
-    user_response = await user_auth_service.get_user_response_with_token(session=session, user=user)
-    return UserResponse(user=user_response)
+    user_dto = await user_auth_service.sign_in_user(
+        session=session, user_to_login=payload.to_dto()
+    )
+    return UserLoginResponse.from_dto(user_dto)

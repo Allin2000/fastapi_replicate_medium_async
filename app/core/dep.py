@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
-from app.schemas.user import UserWithID
+from app.schemas.user import UserDTO
 from app.services.user import UserService
 from app.core.config import get_app_settings
 from app.schemas.auth import TokenPayload #Import TokenPayload
@@ -15,7 +15,6 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlmodel.sql_service import SessionLocal
-from collections.abc import AsyncIterator
 from app.services.article import ArticleService
 from app.services.comment import CommentService
 from app.services.article_tag import ArticleTagService
@@ -27,7 +26,8 @@ from app.services.user import UserService
 from app.services.profile import ProfileService
 from app.services.tag import TagService
 from app.sqlmodel.sql_service import DatabaseService
-
+from app.core.security import HTTPTokenHeader
+from app.services.auth import UserAuthService
 
 def get_Article_service():
     return ArticleService()
@@ -62,6 +62,13 @@ def get_TagService():
 def get_DatabaseService():
     return DatabaseService()
 
+def get_HTTPTokenHeader():
+    return HTTPTokenHeader()
+
+def get_UserAuthService():
+    return UserAuthService()
+
+
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:
         try:
@@ -74,44 +81,32 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+token_security = HTTPTokenHeader(
+    name="Authorization",
+    scheme_name="JWT Token",
+    description="Token Format: `Token xxxxxx.yyyyyyy.zzzzzz`",
+    raise_error=True,
+)
+token_security_optional = HTTPTokenHeader(
+    name="Authorization",
+    scheme_name="JWT Token",
+    description="Token Format: `Token xxxxxx.yyyyyyy.zzzzzz`",
+    raise_error=False,
+)
+
 
 
 async def get_current_user(
-   session:AsyncSession=Depends(get_db_session),
-    authorization: Optional[str] = Header(None),
-) -> UserWithID:
+    session: AsyncSession = Depends(get_db_session),
+    token: str = Depends(HTTPTokenHeader(raise_error=True, name="Authorization")),
+    auth_token_service: AuthTokenService = Depends(AuthTokenService),
+    user_service: UserService = Depends(UserService),
+) -> UserDTO:
     """
-    获取当前登录用户。如果无效或缺失的 token，将抛出 401 错误。
+    获取当前用户，必须提供有效的 token，否则返回 401 错误。
     """
-    settings = get_app_settings()
-    auth_token_service = AuthTokenService(
-        secret_key=settings.secret_key,
-        token_expiration_minutes=settings.token_expiration_minutes,
-        algorithm=settings.algorithm,
-    )
-    user_service = UserService()
-
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header is missing",
-        )
-
     try:
-        token_type, token = authorization.split(" ")
-        if token_type.lower() != "bearer":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token type. Must be 'Bearer'",
-            )
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format. Must be 'Bearer <token>'",
-        )
-
-    try:
-        token_payload: TokenPayload = auth_token_service.parse_jwt_token(token=token)
+        token_payload: TokenPayload = auth_token_service.parse_jwt_token(token)
     except IncorrectJWTTokenException:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -125,7 +120,7 @@ async def get_current_user(
             detail="User not found",
         )
 
-    return UserWithID(
+    return UserDTO(
         id=user.id,
         email=user.email,
         username=user.username,
@@ -135,32 +130,19 @@ async def get_current_user(
     )
 
 async def get_current_user_or_none(
-   session:AsyncSession=Depends(get_db_session),
-    authorization: Optional[str] = Header(None),
-) -> Optional[UserWithID]:
+    session: AsyncSession = Depends(get_db_session),
+    token: str = Depends(HTTPTokenHeader(raise_error=False, name="Authorization")),
+    auth_token_service: AuthTokenService = Depends(AuthTokenService),
+    user_service: UserService = Depends(UserService),
+) -> Optional[UserDTO]:
     """
-    获取当前登录用户。如果 token 无效或未提供，返回 None。
+    尝试获取当前用户，如果无效或未提供 token，返回 None。
     """
-    settings = get_app_settings()
-    auth_token_service = AuthTokenService(
-        secret_key=settings.secret_key,
-        token_expiration_minutes=settings.token_expiration_minutes,
-        algorithm=settings.algorithm,
-    )
-    user_service = UserService()
-
-    if not authorization:
+    if not token:
         return None
 
     try:
-        token_type, token = authorization.split(" ")
-        if token_type.lower() != "bearer":
-            return None
-    except ValueError:
-        return None
-
-    try:
-        token_payload: TokenPayload = auth_token_service.parse_jwt_token(token=token)
+        token_payload: TokenPayload = auth_token_service.parse_jwt_token(token)
     except IncorrectJWTTokenException:
         return None
 
@@ -168,7 +150,7 @@ async def get_current_user_or_none(
     if not user:
         return None
 
-    return UserWithID(
+    return UserDTO(
         id=user.id,
         email=user.email,
         username=user.username,
@@ -176,4 +158,3 @@ async def get_current_user_or_none(
         image=user.image_url,
         token=token,
     )
-
