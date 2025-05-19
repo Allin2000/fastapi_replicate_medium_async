@@ -2,7 +2,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class Profile(BaseModel):
+class ProfileDTO(BaseModel):
     user_id: int  # 如果在业务逻辑中需要用户 ID，请保留
     username: str
     bio: str = ""
@@ -21,7 +21,7 @@ class ProfileResponse(BaseModel):
     profile: ProfileData
 
     @classmethod
-    def from_profile(cls, profile: Profile) -> "ProfileResponse":
+    def from_profile(cls, profile: ProfileDTO) -> "ProfileResponse":
         return ProfileResponse(
             profile=ProfileData(
                 username=profile.username,

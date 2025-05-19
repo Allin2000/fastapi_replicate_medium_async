@@ -10,8 +10,8 @@ from app.core.exception import (
     ProfileNotFoundException,
     UserNotFoundException,
 )
-from app.schemas.profile import Profile as ProfileSchema  # Import Pydantic Profile
-from app.schemas.user import UserBase as UserSchema
+from app.schemas.profile import ProfileDTO
+from app.schemas.user import UserDTO
 from app.sqlmodel.sql_service import DatabaseService
 from app.services.user import UserService
 
@@ -27,17 +27,17 @@ class ProfileService:
         self._database_service = database_service
 
     async def get_profile_by_username(
-        self, session: AsyncSession, username: str, current_user: Optional[UserSchema] = None
-    ) -> ProfileSchema:
+        self, session: AsyncSession, username: str, current_user: Optional[UserDTO] = None
+    ) -> ProfileDTO:
         try:
-            target_user = await self._user_service.get_user_by_username(
+            target_user = await self._user_service.get_by_username(
                 session=session, username=username
             )
         except UserNotFoundException:
             logger.exception("Profile not found", username=username)
             raise ProfileNotFoundException()
 
-        profile = ProfileSchema(
+        profile = ProfileDTO(
             user_id=target_user.id,
             username=target_user.username,
             bio=target_user.bio,
@@ -53,11 +53,11 @@ class ProfileService:
         return profile
 
     async def get_profile_by_user_id(
-        self, session: AsyncSession, user_id: int, current_user: Optional[UserSchema] = None
-    ) -> ProfileSchema:
+        self, session: AsyncSession, user_id: int, current_user: Optional[UserDTO] = None
+    ) -> ProfileDTO:
         target_user = await self._user_service.get_user_by_id(session=session, user_id=user_id)
 
-        profile = ProfileSchema(
+        profile = ProfileDTO(
             user_id=target_user.id,
             username=target_user.username,
             bio=target_user.bio,
@@ -73,8 +73,8 @@ class ProfileService:
         return profile
 
     async def get_profiles_by_user_ids(
-        self, session: AsyncSession, user_ids: List[int], current_user: Optional[UserSchema]
-    ) -> List[ProfileSchema]:
+        self, session: AsyncSession, user_ids: List[int], current_user: Optional[UserDTO]
+    ) -> List[ProfileDTO]:
         target_users = await self._user_service.get_users_by_ids(session=session, user_ids=user_ids)
         profiles = []
         following_map = {}
@@ -87,7 +87,7 @@ class ProfileService:
                 }  # Create a map for efficient lookup
 
         for user_dto in target_users:
-            profile = ProfileSchema(
+            profile = ProfileDTO(
                 user_id=user_dto.id,
                 username=user_dto.username,
                 bio=user_dto.bio,
@@ -97,11 +97,11 @@ class ProfileService:
             profiles.append(profile)
         return profiles
 
-    async def follow_user(self, session: AsyncSession, username: str, current_user: UserSchema) -> None:
+    async def follow_user(self, session: AsyncSession, username: str, current_user: UserDTO) -> None:
         if username == current_user.username:
             raise OwnProfileFollowingException()
 
-        target_user = await self._user_service.get_user_by_username(session=session, username=username)
+        target_user = await self._user_service.get_by_username(session=session, username=username)
 
         async with self._database_service.get_db() as session:
             if await self._check_following(session=session, follower_id=current_user.id, following_id=target_user.id):
@@ -111,11 +111,11 @@ class ProfileService:
                 session=session, follower_id=current_user.id, following_id=target_user.id
             )
 
-    async def unfollow_user(self, session: AsyncSession, username: str, current_user: UserSchema) -> None:
+    async def unfollow_user(self, session: AsyncSession, username: str, current_user: UserDTO) -> None:
         if username == current_user.username:
             raise OwnProfileFollowingException()
 
-        target_user = await self._user_service.get_user_by_username(session=session, username=username)
+        target_user = await self._user_service.get_by_username(session=session, username=username)
         async with self._database_service.get_db() as session:
             if not await self._check_following(session=session, follower_id=current_user.id, following_id=target_user.id):
                 logger.exception("User not followed", username=username)
