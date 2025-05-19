@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 from typing import AsyncGenerator
 
 # 配置数据库连接 URL
-SQLALCHEMY_DATABASE_URI = "postgresql+asyncpg://postgres:postgres@localhost:5432/fastapi-median-db"
+SQLALCHEMY_DATABASE_URI = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
 # 创建异步 SQLAlchemy 引擎
 engine = create_async_engine(

@@ -25,6 +25,8 @@ from app.services.follower import FollowerService
 from app.services.article_tag import ArticleTagService
 from app.services.user import UserService
 from app.services.profile import ProfileService
+from app.services.tag import TagService
+from app.sqlmodel.sql_service import DatabaseService
 
 
 def get_Article_service():
@@ -33,7 +35,7 @@ def get_Article_service():
 def get_CommentService():
     return CommentService()
 
-def ArticleTagService():
+def get_ArticleTagService():
     return ArticleTagService()
 
 def get_AuthTokenService():
@@ -54,6 +56,12 @@ def get_UserService():
 def get_ProfileService():
     return ProfileService()
 
+def get_TagService():
+    return TagService()
+
+def get_DatabaseService():
+    return DatabaseService()
+
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:
         try:
@@ -64,6 +72,8 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+
 
 
 async def get_current_user(

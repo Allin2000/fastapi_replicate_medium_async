@@ -1,16 +1,31 @@
 import datetime
 from pydantic import BaseModel
 
+from sqlmodel.alembic_model import Tag
 
-class Tag(BaseModel):
+
+class TagDTO(BaseModel):
     id: int
     tag: str
     created_at: datetime.datetime
 
+    class Config:
+        orm_mode = True
 
-class TagsResponse(BaseModel):
-    tags: list[str]
+    @staticmethod
+    def from_model(model: Tag) -> "TagDTO":
+        return TagDTO(
+            id=model.id,
+            tag=model.tag,
+            created_at=model.created_at
+        )
 
-    @classmethod
-    def from_tags(cls, tag_objects: list[Tag]) -> "TagsResponse":
-        return TagsResponse(tags=[t.tag for t in tag_objects])
+    @staticmethod
+    def to_model(dto: "TagDTO") -> Tag:
+        model = Tag(tag=dto.tag)
+        if hasattr(dto, "id"):
+            model.id = dto.id
+        return model
+
+
+

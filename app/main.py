@@ -1,14 +1,11 @@
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
+from fastapi import APIRouter
 
 from app.core.middlewares import RateLimitingMiddleware
 from app.core.config import get_app_settings
 from app.core.exception import add_exception_handlers
 from app.core.logging import configure_logger
-
-from fastapi import APIRouter
-
-
 from app.api import (
     article,
     authentication,
@@ -19,11 +16,12 @@ from app.api import (
     user,
 )
 
+
+
+
 router = APIRouter()
 
-router.include_router(
-    router=health_check.router, tags=["Healthy Check"], prefix="/health-check"
-)
+router.include_router(router=health_check.router, tags=["Healthy Check"], prefix="/health-check")
 router.include_router(router=authentication.router, tags=["Authentication"], prefix="/users")
 router.include_router(router=user.router, tags=["User"], prefix="/user")
 router.include_router(router=profile.router, tags=["Profiles"], prefix="/profiles")
