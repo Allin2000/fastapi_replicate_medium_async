@@ -14,7 +14,7 @@ from app.api import (
     authentication,
     comment,
     health_check,
-    # profile,
+    profile,
     tag,
     user,
 )
@@ -26,7 +26,7 @@ router.include_router(
 )
 router.include_router(router=authentication.router, tags=["Authentication"], prefix="/users")
 router.include_router(router=user.router, tags=["User"], prefix="/user")
-# router.include_router(router=profile.router, tags=["Profiles"], prefix="/profiles")
+router.include_router(router=profile.router, tags=["Profiles"], prefix="/profiles")
 router.include_router(router=tag.router, tags=["Tags"], prefix="/tags")
 router.include_router(router=article.router, tags=["Articles"], prefix="/articles")
 router.include_router(router=comment.router, tags=["Comments"], prefix="/articles")
