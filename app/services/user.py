@@ -112,7 +112,7 @@ class UserService:
         return self._to_dto(user)
 
     async def update(self, session: AsyncSession, user_id: int, update_item: UserUpdateDataDTO) -> UserUpdateDTO:
-        current_user = await self.get(session, user_id)
+        current_user = await self.get_user_by_id(session, user_id)
 
         if update_item.username and update_item.username != current_user.username:
             user_with_username = await self.get_by_username_or_none(session, update_item.username)

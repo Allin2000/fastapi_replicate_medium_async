@@ -1,6 +1,9 @@
 from datetime import datetime
 from typing import  List, Optional
 
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased, joinedload # Import joinedload
 from sqlalchemy import (
     delete,
     exists,
@@ -10,17 +13,15 @@ from sqlalchemy import (
     desc,
     and_,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, joinedload # Import joinedload
+
 
 from app.core.exception import ArticleNotFoundException
+from app.sqlmodel.alembic_model import Article, ArticleTag, Favorite, Follower, Tag, User
 from app.core.slug import (
     get_slug_unique_part,
     make_slug_from_title,
     make_slug_from_title_and_code,
 )
-from app.sqlmodel.alembic_model import Article, ArticleTag, Favorite, Follower, Tag, User
-
 from app.schemas.article import (
     ArticleRecordDTO,
     CreateArticleDTO,
@@ -72,7 +73,7 @@ class ArticleService:
             for tag_name in create_item.tags:
                 # Check if tag already exists, create if not
                 existing_tag_query = select(Tag).where(Tag.tag == tag_name)
-                db_tag = (await session.execute(existing_tag_query)).scalar_one_or_none()
+                db_tag = (await session.execute(existing_tag_query)).unique().scalar_one_or_none()
                 if not db_tag:
                     db_tag = Tag(tag=tag_name, created_at=now)
                     session.add(db_tag)
@@ -138,10 +139,10 @@ class ArticleService:
         ).where(Article.slug == slug)
 
         result = await session.execute(stmt)
-        db_article = result.scalar_one_or_none()
+        db_article = result.unique().scalar_one_or_none()
 
         if not db_article:
-            raise ArticleNotFoundException(f"Article with slug '{slug}' not found.")
+            raise ArticleNotFoundException()
 
         # Get tags list from the loaded ArticleTag objects
         tags_list = [article_tag.tag_obj.tag for article_tag in db_article.article_tags if article_tag.tag_obj]
@@ -192,10 +193,10 @@ class ArticleService:
     async def delete_by_slug(self, session: AsyncSession, slug: str) -> None:
         # Get article ID
         article_id_result = await session.execute(select(Article.id).where(Article.slug == slug))
-        article_id = article_id_result.scalar_one_or_none()
+        article_id = article_id_result.unique().scalar_one_or_none()
 
         if not article_id:
-            raise ArticleNotFoundException(f"Article with slug '{slug}' not found.")
+            raise ArticleNotFoundException()
 
         # Delete related records first due to foreign key constraints (CASCADE might handle this, but explicit is safer)
         await session.execute(delete(ArticleTag).where(ArticleTag.article_id == article_id))
@@ -205,7 +206,7 @@ class ArticleService:
         result = await session.execute(delete(Article).where(Article.id == article_id))
         if result.rowcount == 0:
             # This should ideally not happen if article_id was found, but good for robustness
-            raise ArticleNotFoundException(f"Article with slug '{slug}' not found during deletion.")
+            raise ArticleNotFoundException()
 
     async def update_by_slug(
         self, session: AsyncSession, slug: str, update_item: UpdateArticleDTO, current_user_id: Optional[int] = None
@@ -214,7 +215,7 @@ class ArticleService:
         query = select(Article).where(Article.slug == slug)
         article = await session.scalar(query)
         if not article:
-            raise ArticleNotFoundException(f"Article with slug '{slug}' not found.")
+            raise ArticleNotFoundException()
 
         update_data = update_item.model_dump(exclude_unset=True, by_alias=False)
 
@@ -254,7 +255,7 @@ class ArticleService:
                 for tag_name in tags_to_update:
                     # Find or create tag
                     existing_tag_query = select(Tag).where(Tag.tag == tag_name)
-                    db_tag = (await session.execute(existing_tag_query)).scalar_one_or_none()
+                    db_tag = (await session.execute(existing_tag_query)).unique().scalar_one_or_none()
                     if not db_tag:
                         db_tag = Tag(tag=tag_name, created_at=now)
                         session.add(db_tag)
@@ -380,7 +381,7 @@ class ArticleService:
 
         if favorited:
             favorited_user_id_query = select(User.id).where(User.username == favorited)
-            _favorited_user_id = (await session.execute(favorited_user_id_query)).scalar_one_or_none()
+            _favorited_user_id = (await session.execute(favorited_user_id_query)).unique().scalar_one_or_none()
             if not _favorited_user_id:
                 return ArticlesFeedDTO(articles=[], articlesCount=0) # If favorited user doesn't exist, no articles
             
@@ -418,7 +419,14 @@ class ArticleService:
                 id=db_article.author.id,
             )
 
-            tags: List[str] = [article_tag.tag_obj.tag for article_tag in db_article.article_tags if article_tag.tag_obj]
+            # tags: List[str] = [article_tag.tag_obj.tag for article_tag in db_article.article_tags if article_tag.tag_obj]
+
+                        # 修改为：获取标签名称列表后进行字母排序
+            tags: List[str] = sorted([
+                article_tag.tag_obj.tag
+                for article_tag in db_article.article_tags
+                if article_tag.tag_obj # 确保 tag_obj 存在
+            ]) # <-- 增加 sorted() 函数进行排序
 
             # Query favorites count for each article
             favorites_count_query = select(func.count(Favorite.article_id)).where(Favorite.article_id == db_article.id)

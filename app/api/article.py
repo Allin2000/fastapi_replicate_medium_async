@@ -1,22 +1,20 @@
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, Query, HTTPException
 from starlette import status
 
-from app.schemas.article import (
-    ArticleResponse,
-    ArticlesFeedDTO,
-    CreateArticleDTO,
-    UpdateArticleDTO,
-)
 from app.schemas.user import UserDTO
 from app.services.article import ArticleService
 from app.services.favorite import FavoriteService
-
-
 from app.core.dep import container
 from app.core.dep import get_current_user, get_current_user_or_none
+from app.schemas.article import (
+    ArticleResponse,
+    ArticlesFeedDTO,
+    CreateArticleRequest,
+    UpdateArticleDTO,
+)
 
 router = APIRouter()
 
@@ -72,7 +70,7 @@ async def get_global_article_feed(
 
 @router.post("", response_model=ArticleResponse)
 async def create_article(
-    payload: CreateArticleDTO,
+    payload: CreateArticleRequest,
     session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user),
     article_service: ArticleService = Depends(container.article_service),
@@ -81,7 +79,7 @@ async def create_article(
     Create new article.
     """
     # The 'add' method in ArticleService now handles tag creation and returns the full ArticleDTO
-    article_dto = await article_service.add(session=session, author_id=current_user.id, create_item=payload)
+    article_dto = await article_service.add(session=session, author_id=current_user.id, create_item=payload.to_dto())
     return ArticleResponse(article=article_dto)
 
 

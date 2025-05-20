@@ -4,18 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from app.schemas.profile import ProfileResponse,ProfileData
+from app.schemas.user import UserDTO
+from app.services.profile import ProfileService
+from app.core.dep import get_current_user, get_current_user_or_none, container
 from app.core.exception import (
     OwnProfileFollowingException,
     ProfileAlreadyFollowedException,
     ProfileNotFollowedFollowedException,
     ProfileNotFoundException,
 )
-
-from app.schemas.profile import ProfileResponse,ProfileData
-from app.schemas.user import UserDTO
-from app.services.profile import ProfileService
-
-from app.core.dep import get_current_user, get_current_user_or_none, container
 
 router = APIRouter() # 添加前缀和标签，使路由更清晰
 

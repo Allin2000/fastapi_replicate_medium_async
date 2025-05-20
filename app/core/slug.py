@@ -1,5 +1,4 @@
 from secrets import token_urlsafe
-
 from slugify import slugify
 
 
@@ -37,3 +36,13 @@ def get_slug_unique_part(slug: str) -> str:
         "123456"
     """
     return slug.split("-")[-1]
+
+
+
+
+
+
+
+
+
+

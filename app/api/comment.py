@@ -1,24 +1,26 @@
+from typing import Optional
+
 from fastapi import APIRouter, Path, Depends, HTTPException
 from starlette import status
-from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from structlog import get_logger # 确保导入 logger
 
 from app.schemas.comment import CreateCommentRequest
 from app.schemas.comment import CommentResponse, CommentsListResponse
 from app.schemas.user import UserDTO
-from app.core.dep import (
-    get_current_user_or_none,
-    get_current_user,
-    container
-)
-
 from app.services.comment import CommentService
 from app.core.exception import ( # 导入可能抛出的新异常
     ArticleNotFoundException,
     CommentNotFoundException,
-)
-from sqlalchemy.ext.asyncio import AsyncSession
+                            )
+from app.core.dep import (
+    get_current_user_or_none,
+    get_current_user,
+    container
+            )
 
-import logging
+
+logger = get_logger()
 
 router = APIRouter()
 
@@ -44,7 +46,7 @@ async def get_comments(
             detail="Article not found."
         )
     except Exception as e:
-        logging.error("Error getting comments for article", slug=slug, exc_info=True)
+        logger.error(f"Error getting comments for article with slug: {slug}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {e}"
@@ -76,7 +78,7 @@ async def create_comment(
             detail="Article not found."
         )
     except Exception as e:
-        logging.error("Error creating comment for article", slug=slug, exc_info=True)
+        logger.error(f"Error getting comments for article with slug: {slug}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {e}"
@@ -109,7 +111,7 @@ async def delete_comment(
             detail="Comment not found."
         )
     except Exception as e:
-        logging.error("Error deleting comment for article", slug=slug, comment_id=comment_id, exc_info=True)
+        logger.error(f"Error getting comments for article with slug: {slug}comment_id{comment_id}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An unexpected error occurred: {e}"

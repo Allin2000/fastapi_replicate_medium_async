@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.auth import UserAuthService  # 正确的 service
+from app.core.dep import container
 from app.schemas.user import (
     UserRegistrationRequest,
     UserLoginRequest,
     UserRegistrationResponse,
     UserLoginResponse,
 )
-from app.services.auth import UserAuthService  # 正确的 service
-from app.core.dep import container
 
 router = APIRouter()
 

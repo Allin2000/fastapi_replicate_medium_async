@@ -1,15 +1,15 @@
-from typing import Optional
 import contextlib
+from typing import Optional
+from collections.abc import AsyncIterator
+
 from fastapi import Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.schemas.user import UserDTO
 from app.core.config import get_app_settings,BaseAppSettings
 from app.schemas.auth import TokenPayload
 from app.core.exception import IncorrectJWTTokenException
-
-
 from app.services.article import ArticleService
 from app.services.comment import CommentService
 from app.services.auth_token import AuthTokenService
@@ -21,8 +21,8 @@ from app.services.auth import UserAuthService
 from app.services.favorite import FavoriteService
 from app.services.follower import FollowerService
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from collections.abc import AsyncIterator
+
+
 
 
 class Container:
@@ -92,7 +92,10 @@ class Container:
     
 
     def comment_service(self) -> CommentService:
-        return CommentService()
+        return CommentService(
+            user_service=self.user_service(),
+            follower_service=self.follower_service()
+        )
     
     def follower_service(self) -> FollowerService:
         return FollowerService()

@@ -19,6 +19,7 @@ from app.api import (
 
 
 
+
 router = APIRouter()
 
 router.include_router(router=health_check.router, tags=["Healthy Check"], prefix="/health-check")
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     add_exception_handlers(app=application)
 
     configure_logger()
+
 
     return application
 

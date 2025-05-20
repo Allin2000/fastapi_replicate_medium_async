@@ -6,7 +6,6 @@ from structlog import get_logger
 from pydantic import  ValidationError
 
 from app.schemas.auth import TokenPayload
-
 from app.core.exception import IncorrectJWTTokenException
 
 logger = get_logger()

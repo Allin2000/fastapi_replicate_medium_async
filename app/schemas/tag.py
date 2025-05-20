@@ -1,7 +1,10 @@
 import datetime
+from typing import List
+
 from pydantic import BaseModel
 
 from sqlmodel.alembic_model import Tag
+
 
 
 class TagDTO(BaseModel):
@@ -26,6 +29,11 @@ class TagDTO(BaseModel):
         if hasattr(dto, "id"):
             model.id = dto.id
         return model
+    
+
+# --- 新增的 TagListResponse 模型 ---
+class TagListResponse(BaseModel):
+    tags: List[str] # 这是一个字符串列表，因为 Conduit API 返回的是标签名称列表
 
 
 

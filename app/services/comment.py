@@ -130,7 +130,7 @@ class CommentService:
         """
         根据 Comment SQLAlchemy 模型和当前用户，构建包含 ProfileDTO 的 CommentDTO。
         """
-        author_user = await self._user_service.get(
+        author_user = await self._user_service.get_user_by_id(
             session=session, user_id=comment_record.author_id
         )
         if not author_user:

@@ -2,16 +2,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from structlog import get_logger
 
 from app.core.exception import IncorrectLoginInputException, UserNotFoundException
+from app.services.auth_token import AuthTokenService
+from app.services.user import UserService
+from app.services.password import verify_password
 from app.schemas.user import (
     CreatedUserDTO,
     UserRegistrationDataDTO,
     LoggedInUserDTO,
     LoginUserDTO,
 )
-
-from app.services.auth_token import AuthTokenService
-from app.services.user import UserService
-from app.services.password import verify_password
 
 logger = get_logger()
 
