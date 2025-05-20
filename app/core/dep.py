@@ -79,13 +79,12 @@ class Container:
     
     def profile_service(self) -> ProfileService:
         return ProfileService(
-            user_service=self.user_service()
+            user_service=self.user_service(),
+            follower_service=self.follower_service()
             )
     
-
     def tag_service(self) -> TagService:
         return TagService()
-
 
 
     def article_service(self) -> ArticleService:
@@ -103,7 +102,6 @@ class Container:
     
 
         
-
 container = Container(settings=get_app_settings())
 
 token_security = HTTPTokenHeader(
@@ -125,7 +123,7 @@ async def get_current_user(
     session: AsyncSession = Depends(container.session),
     token: str = Depends(token_security),
     auth_token_service: AuthTokenService = Depends(container.auth_token_service),
-    user_service: UserService = Depends(container.user_auth_service),
+    user_service: UserService = Depends(container.user_service),
 ) -> UserDTO:
     """
     获取当前用户，必须提供有效的 token，否则返回 401 错误。
@@ -151,14 +149,15 @@ async def get_current_user(
         username=user.username,
         bio=user.bio,
         image=user.image_url,
-        token=token,
+        password_hash=user.password_hash,
+        created_at=user.created_at
     )
 
 async def get_current_user_or_none(
     session: AsyncSession = Depends(container.session),
     token: str = Depends(token_security_optional),
-    auth_token_service: AuthTokenService = Depends(AuthTokenService),
-    user_service: UserService = Depends(UserService),
+    auth_token_service: AuthTokenService = Depends(container.auth_token_service),
+    user_service: UserService = Depends(container.user_service),
 ) -> Optional[UserDTO]:
     """
     尝试获取当前用户，如果无效或未提供 token，返回 None。
@@ -180,6 +179,7 @@ async def get_current_user_or_none(
         email=user.email,
         username=user.username,
         bio=user.bio,
-        image=user.image_url,
-        token=token,
+        image_url=user.image_url,
+        password_hash=user.password_hash,
+        created_at=user.created_at
     )

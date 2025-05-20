@@ -24,6 +24,8 @@ class User(Base):
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime] = mapped_column(nullable=True)
 
+    articles: Mapped[list["Article"]] = relationship(back_populates="author")
+
 
 class Follower(Base):
     __tablename__ = "follower"
@@ -47,6 +49,10 @@ class Article(Base):
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime] = mapped_column(nullable=True)
 
+    author: Mapped["User"] = relationship(back_populates="articles")
+
+    article_tags: Mapped[list["ArticleTag"]] = relationship(back_populates="article")
+
 
 class Tag(Base):
     __tablename__ = "tag"
@@ -54,6 +60,9 @@ class Tag(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tag: Mapped[str] = mapped_column(nullable=False, unique=True)
     created_at: Mapped[datetime]
+
+    # ADD THIS: 定义反向关系，如果 ArticleTag 有一个指向 Tag 的关系
+    article_tags_assoc: Mapped[list["ArticleTag"]] = relationship(back_populates="tag_obj")
 
 
 class ArticleTag(Base):
@@ -64,6 +73,12 @@ class ArticleTag(Base):
     )
     tag_id: Mapped[int] = mapped_column(ForeignKey("tag.id"), primary_key=True)
     created_at: Mapped[datetime]
+
+        # ADD THIS: 定义 article 关系，连接到 Article 模型
+    article: Mapped["Article"] = relationship(back_populates="article_tags")
+
+    # ADD THIS: 定义 tag_obj 关系，连接到 Tag 模型 (名称与 service 层保持一致)
+    tag_obj: Mapped["Tag"] = relationship(back_populates="article_tags_assoc")
 
 
 class Favorite(Base):

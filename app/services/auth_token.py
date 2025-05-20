@@ -13,7 +13,6 @@ logger = get_logger()
 
 
 
-
 class AuthTokenService:
     """Service to handle JWT tokens using Pydantic models."""
 
