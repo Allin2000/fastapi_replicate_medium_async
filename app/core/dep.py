@@ -1,18 +1,15 @@
-from typing import Annotated, Optional,Generator
+from typing import Optional
 
-from fastapi import Depends, HTTPException, Header
+from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from app.schemas.user import UserDTO
-from app.services.user import UserService
 from app.core.config import get_app_settings
 from app.schemas.auth import TokenPayload #Import TokenPayload
-from app.services.auth_token import AuthTokenService
 from app.core.exception import IncorrectJWTTokenException
 
 from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlmodel.sql_service import SessionLocal
 from app.services.article import ArticleService
@@ -21,13 +18,14 @@ from app.services.article_tag import ArticleTagService
 from app.services.auth_token import AuthTokenService
 from app.services.favorite import FavoriteService
 from app.services.follower import FollowerService
-from app.services.article_tag import ArticleTagService
 from app.services.user import UserService
 from app.services.profile import ProfileService
 from app.services.tag import TagService
 from app.sqlmodel.sql_service import DatabaseService
 from app.core.security import HTTPTokenHeader
 from app.services.auth import UserAuthService
+
+settings = get_app_settings()
 
 def get_Article_service():
     return ArticleService()
@@ -39,7 +37,9 @@ def get_ArticleTagService():
     return ArticleTagService()
 
 def get_AuthTokenService():
-    return AuthTokenService()
+    return AuthTokenService(secret_key=settings.jwt_secret_key,
+        token_expiration_minutes=settings.jwt_token_expiration_minutes,
+        algorithm=settings.jwt_algorithm,)
 
 def get_FavoriteService():
     return FavoriteService()
@@ -47,8 +47,8 @@ def get_FavoriteService():
 def get_FollowerService():
     return FollowerService()
 
-def get_ArticleTagService():
-    return ArticleTagService()
+# def get_ArticleTagService():
+#     return ArticleTagService()
 
 def get_UserService():
     return UserService()
@@ -66,7 +66,9 @@ def get_HTTPTokenHeader():
     return HTTPTokenHeader()
 
 def get_UserAuthService():
-    return UserAuthService()
+    return UserAuthService(
+        user_service=get_UserService(), auth_token_service=get_AuthTokenService()
+    )
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:

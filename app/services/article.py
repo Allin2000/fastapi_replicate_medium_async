@@ -1,7 +1,15 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import  List, Optional
 
-from sqlalchemy import delete, exists, func, insert, select, true, update, desc # Import desc
+from sqlalchemy import (
+    delete,
+    exists,
+    func,
+    select,
+    update,
+    desc,
+    and_,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, joinedload # Import joinedload
 
@@ -13,7 +21,6 @@ from app.core.slug import (
 )
 from app.sqlmodel.alembic_model import Article, ArticleTag, Favorite, Follower, Tag, User
 
-# Import your defined DTOs
 from app.schemas.article import (
     ArticleRecordDTO,
     CreateArticleDTO,
@@ -21,125 +28,92 @@ from app.schemas.article import (
     ArticleAuthorDTO,
     ArticleDTO,
     ArticlesFeedDTO,
+    DEFAULT_ARTICLES_LIMIT,
+    DEFAULT_ARTICLES_OFFSET,
 )
 
-# Aliases for the models if needed.
+# Aliases for clarity in joins
 FavoriteAlias = aliased(Favorite)
+TagAlias = aliased(Tag)
 
 
 class ArticleService:
 
-    # Helper method to build ArticleDTO from a SQLAlchemy row or model
-    # This centralizes the DTO creation logic
-    async def _build_article_dto_from_db_result(
-        self, session: AsyncSession, db_result: Any, user_id: Optional[int] = None
-    ) -> ArticleDTO:
-        """
-        Builds an ArticleDTO from a SQLAlchemy row object or an Article model instance.
-        Fetches additional details (author, tags, favorites) if not present in the row.
-        """
-        article_id = getattr(db_result, 'id', None)
-        author_id = getattr(db_result, 'author_id', None)
-
-        # Initialize common fields
-        article_dto_data = {
-            "id": article_id,
-            "slug": getattr(db_result, 'slug', None),
-            "title": getattr(db_result, 'title', None),
-            "description": getattr(db_result, 'description', None),
-            "body": getattr(db_result, 'body', None),
-            "created_at": getattr(db_result, 'created_at', None),
-            "updated_at": getattr(db_result, 'updated_at', None),
-        }
-
-        # --- Author details ---
-        author_dto_data = {
-            "username": getattr(db_result, 'username', ""),
-            "bio": getattr(db_result, 'bio', ""),
-            "image": getattr(db_result, 'image_url', None),
-            "following": getattr(db_result, 'following', False),
-            "id": getattr(db_result, 'user_id', None),
-        }
-
-        # If author data is missing from row (e.g., from ArticleRecordDTO creation)
-        if not author_dto_data["username"] and author_id:
-            author_model = await session.scalar(select(User).where(User.id == author_id))
-            if author_model:
-                author_dto_data["username"] = author_model.username
-                author_dto_data["bio"] = author_model.bio
-                author_dto_data["image"] = author_model.image_url
-                author_dto_data["id"] = author_model.id
-                if user_id: # Check following only if user_id is provided
-                    following_check = await session.scalar(
-                        select(exists().where((Follower.follower_id == user_id) & (Follower.following_id == author_model.id)))
-                    )
-                    author_dto_data["following"] = following_check if following_check is not None else False
-
-        article_dto_data["author"] = ArticleAuthorDTO(**author_dto_data)
-
-        # --- Tags ---
-        tags_list = getattr(db_result, 'tags', None)
-        if tags_list is None and article_id: # If tags not in row, query them
-            tags_models = await session.scalars(
-                select(Tag)
-                .join(ArticleTag, (ArticleTag.tag_id == Tag.id) & (ArticleTag.article_id == article_id))
-            )
-            tags_list = [tag.tag for tag in tags_models.all()]
-        elif isinstance(tags_list, str): # Handle comma-separated string from func.string_agg
-            tags_list = [tag.strip() for tag in tags_list.split(",")] if tags_list else []
-        else: # Default to empty list
-            tags_list = []
-        article_dto_data["tags"] = tags_list
-
-        # --- Favorites ---
-        article_dto_data["favorites_count"] = getattr(db_result, 'favorites_count', 0)
-        article_dto_data["favorited"] = getattr(db_result, 'favorited', False)
-        
-        # If favorited/favorites_count not in row, query them
-        if (article_dto_data["favorites_count"] == 0 and not article_dto_data["favorited"]) and article_id:
-             favorites_count_query = await session.scalar(select(func.count(Favorite.article_id)).where(Favorite.article_id == article_id))
-             article_dto_data["favorites_count"] = favorites_count_query or 0
-             if user_id:
-                 favorited_check = await session.scalar(
-                     select(exists().where((Favorite.user_id == user_id) & (Favorite.article_id == article_id)))
-                 )
-                 article_dto_data["favorited"] = favorited_check if favorited_check is not None else False
-
-
-        return ArticleDTO(**article_dto_data)
-
-
     async def add(
         self, session: AsyncSession, author_id: int, create_item: CreateArticleDTO
-    ) -> ArticleDTO: # Returns full ArticleDTO
-        query = (
-            insert(Article)
-            .values(
-                author_id=author_id,
-                slug=make_slug_from_title(title=create_item.title),
-                title=create_item.title,
-                description=create_item.description,
-                body=create_item.body,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-            )
-            .returning(Article)
-        )
-        result = await session.execute(query)
-        article_model = result.scalar_one()
+    ) -> ArticleDTO:
+        # Generate slug and ensure uniqueness
+        base_slug = make_slug_from_title(create_item.title)
+        existing_slug_count_query = select(func.count(Article.id)).where(Article.slug.like(f"{base_slug}%"))
+        existing_slug_count = (await session.execute(existing_slug_count_query)).scalar_one()
 
-        # To return a full ArticleDTO, we need more data than just the basic Article record.
-        # This will involve fetching author, tags, etc.
-        # This is a good place to call the comprehensive helper.
-        return await self._build_article_dto_from_db_result(session, article_model, user_id=None) # user_id=None for initial add
+        if existing_slug_count > 0:
+            # Append a unique part if a similar slug already exists
+            slug = make_slug_from_title_and_code(create_item.title, get_slug_unique_part())
+        else:
+            slug = base_slug
+
+        now = datetime.utcnow()
+        db_article = Article(
+            author_id=author_id,
+            slug=slug,
+            title=create_item.title,
+            description=create_item.description,
+            body=create_item.body,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(db_article)
+        await session.flush()  # Flush to get db_article.id
+
+        # Handle tags
+        article_tags_list: List[str] = []
+        if create_item.tags:
+            for tag_name in create_item.tags:
+                # Check if tag already exists, create if not
+                existing_tag_query = select(Tag).where(Tag.tag == tag_name)
+                db_tag = (await session.execute(existing_tag_query)).scalar_one_or_none()
+                if not db_tag:
+                    db_tag = Tag(tag=tag_name, created_at=now)
+                    session.add(db_tag)
+                    await session.flush() # Flush to get db_tag.id
+
+                # Link article to tag
+                db_article_tag = ArticleTag(article_id=db_article.id, tag_id=db_tag.id, created_at=now)
+                session.add(db_article_tag)
+                article_tags_list.append(tag_name)
+
+        # Fetch author information
+        user_query = select(User).where(User.id == author_id)
+        user = (await session.execute(user_query)).scalar_one()
+
+        author_dto = ArticleAuthorDTO(
+            username=user.username,
+            bio=user.bio or "",
+            image=user.image_url, # Use image_url from User model
+            following=False, # New article, author is not necessarily followed by current user
+            id=user.id,
+        )
+
+        return ArticleDTO(
+            id=db_article.id,
+            author_id=db_article.author_id,
+            slug=db_article.slug,
+            title=db_article.title,
+            description=db_article.description,
+            body=db_article.body,
+            tags=article_tags_list,
+            author=author_dto,
+            createdAt=db_article.created_at,
+            updatedAt=db_article.updated_at,
+            favorited=False,
+            favoritesCount=0,
+        )
 
     async def get_by_slug_or_none(
         self, session: AsyncSession, slug: str
-    ) -> Optional[ArticleRecordDTO]: # Returns ArticleRecordDTO for simple lookup
-        slug_unique_part = get_slug_unique_part(slug=slug)
-        query = select(Article).where(
-            (Article.slug == slug) | (Article.slug.contains(slug_unique_part))
-        )
+    ) -> Optional[ArticleRecordDTO]:
+        query = select(Article).where(Article.slug == slug)
         article = await session.scalar(query)
         if article:
             return ArticleRecordDTO(
@@ -154,411 +128,334 @@ class ArticleService:
             )
         return None
 
-    async def get_by_slug(self, session: AsyncSession, slug: str) -> ArticleDTO: # Returns full ArticleDTO
-        slug_unique_part = get_slug_unique_part(slug=slug)
-        query = select(Article).where(
-            (Article.slug == slug) | (Article.slug.contains(slug_unique_part))
-        )
-        article = await session.scalar(query)
-        if not article:
-            raise ArticleNotFoundException()
-        
-        # Return full ArticleDTO for a single lookup by slug, assuming more details are needed
-        return await self._build_article_dto_from_db_result(session, article, user_id=None)
+    async def get_by_slug(self, session: AsyncSession, slug: str, current_user_id: Optional[int] = None) -> ArticleDTO:
+        # Load Article, its author, and tags
+        stmt = select(Article).options(
+            # Assuming you have a relationship named 'author_rel' in Article model pointing to User
+            # If not, you should add one or use joinedload(User)
+            joinedload(Article.author), # Use 'author' if that's the relationship name to User
+            joinedload(Article.article_tags).joinedload(ArticleTag.tag_obj) # Load ArticleTags and then the associated Tag object
+        ).where(Article.slug == slug)
 
+        result = await session.execute(stmt)
+        db_article = result.scalar_one_or_none()
+
+        if not db_article:
+            raise ArticleNotFoundException(f"Article with slug '{slug}' not found.")
+
+        # Get tags list from the loaded ArticleTag objects
+        tags_list = [article_tag.tag_obj.tag for article_tag in db_article.article_tags if article_tag.tag_obj]
+
+        # Check if the author is followed by the current user
+        is_following_author = False
+        if current_user_id and db_article.author_id:
+            follow_query = select(exists().where(
+                and_(Follower.follower_id == current_user_id, Follower.following_id == db_article.author_id)
+            ))
+            is_following_author = (await session.execute(follow_query)).scalar_one()
+
+        author_dto = ArticleAuthorDTO(
+            username=db_article.author.username, # Access username through the loaded author relationship
+            bio=db_article.author.bio or "",
+            image=db_article.author.image_url, # Access image_url through the loaded author relationship
+            following=is_following_author,
+            id=db_article.author.id,
+        )
+
+        # Query favorite count
+        favorites_count_query = select(func.count(Favorite.article_id)).where(Favorite.article_id == db_article.id)
+        favorites_count = (await session.execute(favorites_count_query)).scalar_one()
+
+        # Check if the article is favorited by the current user
+        is_favorited = False
+        if current_user_id:
+            favorited_query = select(exists().where(
+                and_(Favorite.user_id == current_user_id, Favorite.article_id == db_article.id)
+            ))
+            is_favorited = (await session.execute(favorited_query)).scalar_one()
+
+        return ArticleDTO(
+            id=db_article.id,
+            author_id=db_article.author_id,
+            slug=db_article.slug,
+            title=db_article.title,
+            description=db_article.description,
+            body=db_article.body,
+            tags=tags_list,
+            author=author_dto,
+            createdAt=db_article.created_at,
+            updatedAt=db_article.updated_at,
+            favorited=is_favorited,
+            favoritesCount=favorites_count,
+        )
 
     async def delete_by_slug(self, session: AsyncSession, slug: str) -> None:
-        query = delete(Article).where(Article.slug == slug)
-        await session.execute(query)
+        # Get article ID
+        article_id_result = await session.execute(select(Article.id).where(Article.slug == slug))
+        article_id = article_id_result.scalar_one_or_none()
+
+        if not article_id:
+            raise ArticleNotFoundException(f"Article with slug '{slug}' not found.")
+
+        # Delete related records first due to foreign key constraints (CASCADE might handle this, but explicit is safer)
+        await session.execute(delete(ArticleTag).where(ArticleTag.article_id == article_id))
+        await session.execute(delete(Favorite).where(Favorite.article_id == article_id))
+        
+        # Delete the article
+        result = await session.execute(delete(Article).where(Article.id == article_id))
+        if result.rowcount == 0:
+            # This should ideally not happen if article_id was found, but good for robustness
+            raise ArticleNotFoundException(f"Article with slug '{slug}' not found during deletion.")
 
     async def update_by_slug(
-        self, session: AsyncSession, slug: str, update_item: UpdateArticleDTO
-    ) -> ArticleDTO: # Returns full ArticleDTO
-        query = (
-            update(Article)
-            .where(Article.slug == slug)
-            .values(updated_at=datetime.now())
-            .returning(Article)
-        )
-        if update_item.title is not None:
-            updated_slug = make_slug_from_title_and_code(
-                title=update_item.title, code=get_slug_unique_part(slug=slug)
+        self, session: AsyncSession, slug: str, update_item: UpdateArticleDTO, current_user_id: Optional[int] = None
+    ) -> ArticleDTO:
+        # Fetch the article
+        query = select(Article).where(Article.slug == slug)
+        article = await session.scalar(query)
+        if not article:
+            raise ArticleNotFoundException(f"Article with slug '{slug}' not found.")
+
+        update_data = update_item.model_dump(exclude_unset=True, by_alias=False)
+
+        tags_to_update = update_data.pop("tags", None) # Extract tags separately
+
+        # Handle title change and slug update
+        if "title" in update_data and update_data["title"] != article.title:
+            new_base_slug = make_slug_from_title(update_data["title"])
+            existing_slug_count_query = select(func.count(Article.id)).where(
+                and_(Article.slug.like(f"{new_base_slug}%"), Article.id != article.id)
             )
-            query = query.values(title=update_item.title, slug=updated_slug)
-        if update_item.description is not None:
-            query = query.values(description=update_item.description)
-        if update_item.body is not None:
-            query = query.values(body=update_item.body)
+            existing_slug_count = (await session.execute(existing_slug_count_query)).scalar_one()
+            if existing_slug_count > 0:
+                new_slug = make_slug_from_title_and_code(update_data["title"], get_slug_unique_part())
+            else:
+                new_slug = new_base_slug
+            update_data["slug"] = new_slug
 
-        result = await session.execute(query)
-        article_model = result.scalar_one()
+        update_data["updated_at"] = datetime.utcnow()
 
-        # Handle tags update
-        if update_item.tags is not None:
-            # 1. Delete existing ArticleTag entries for this article
-            await session.execute(delete(ArticleTag).where(ArticleTag.article_id == article_model.id))
+        # Update article fields in database
+        if update_data:
+            await session.execute(
+                update(Article)
+                .where(Article.id == article.id)
+                .values(**update_data)
+            )
+            await session.flush() # Ensure updates are applied before refreshing
+
+        # Update tags
+        if tags_to_update is not None: # Check if tags were even provided in the update payload
+            # Delete existing tags for this article
+            await session.execute(delete(ArticleTag).where(ArticleTag.article_id == article.id))
             
-            # 2. Find or create new tags and link them
-            tag_objects = []
-            if update_item.tags:
-                # Insert new tags if they don't exist, and get their IDs
-                insert_tag_query = (
-                    insert(Tag)
-                    .on_conflict_do_nothing(index_elements=[Tag.tag]) # Assuming 'tag' column is unique
-                    .values([{"tag": tag, "created_at": datetime.now()} for tag in update_item.tags])
-                    .returning(Tag)
-                )
-                # Fetch existing tags as well if they were not inserted (due to on_conflict_do_nothing)
-                # Need to select tags based on the list of tags
-                existing_tags_query = select(Tag).where(Tag.tag.in_(update_item.tags))
-                
-                inserted_tags_result = await session.execute(insert_tag_query)
-                inserted_tags = inserted_tags_result.scalars().all()
-                
-                existing_tags_result = await session.execute(existing_tags_query)
-                existing_tags = existing_tags_result.scalars().all()
+            if tags_to_update: # Add new tags if provided
+                now = datetime.utcnow()
+                for tag_name in tags_to_update:
+                    # Find or create tag
+                    existing_tag_query = select(Tag).where(Tag.tag == tag_name)
+                    db_tag = (await session.execute(existing_tag_query)).scalar_one_or_none()
+                    if not db_tag:
+                        db_tag = Tag(tag=tag_name, created_at=now)
+                        session.add(db_tag)
+                        await session.flush() # Flush to get new tag ID
 
-                # Combine all tags (inserted + existing)
-                all_tags_map = {t.tag: t for t in inserted_tags + existing_tags}
-                tag_objects = [all_tags_map[tag] for tag in update_item.tags if tag in all_tags_map]
+                    # Link article to tag
+                    db_article_tag = ArticleTag(article_id=article.id, tag_id=db_tag.id, created_at=now)
+                    session.add(db_article_tag)
+            await session.flush()
 
-
-            # 3. Create new ArticleTag links
-            if tag_objects:
-                link_values = [
-                    {"article_id": article_model.id, "tag_id": tag.id, "created_at": datetime.now()}
-                    for tag in tag_objects
-                ]
-                insert_link_query = insert(ArticleTag).values(link_values)
-                await session.execute(insert_link_query)
-            
-            # Commit the tag changes
-            await session.commit()
-
-
-        # Return full ArticleDTO
-        return await self._build_article_dto_from_db_result(session, article_model, user_id=None)
-
+        # Refresh article to get latest state for DTO conversion
+        await session.refresh(article)
+        
+        # Use get_by_slug to return a complete ArticleDTO, including author, tags, favorites
+        updated_article_dto = await self.get_by_slug(session, article.slug, current_user_id=current_user_id)
+        return updated_article_dto
 
     async def list_by_followings(
-        self, session: AsyncSession, user_id: int, limit: int, offset: int
-    ) -> ArticlesFeedDTO: # Changed to return ArticlesFeedDTO
-        # This query needs to be more comprehensive to populate ArticleDTO directly
-        # I'm adapting it to match the structure of list_by_followings_v2
-        query = (
-            select(
-                Article.id.label("id"),
-                Article.author_id.label("author_id"),
-                Article.slug.label("slug"),
-                Article.title.label("title"),
-                Article.description.label("description"),
-                Article.body.label("body"),
-                Article.created_at.label("created_at"),
-                Article.updated_at.label("updated_at"),
-                User.id.label("user_id"),
-                User.username.label("username"),
-                User.bio.label("bio"),
-                User.image_url.label("image_url"),
-                true().label("following"), # Assuming 'true' because these are user's followings
-                # Subquery for favorites count.
-                select(func.count(Favorite.article_id))
-                .where(Favorite.article_id == Article.id)
-                .scalar_subquery()
-                .label("favorites_count"),
-                # Subquery to check if favorited by user with id `user_id`.
-                exists()
-                .where((Favorite.user_id == user_id) & (Favorite.article_id == Article.id))
-                .label("favorited"),
-                # Concatenate tags.
-                func.string_agg(Tag.tag, ", ").label("tags"),
-            )
-            .join(
-                Follower,
-                (Follower.following_id == Article.author_id) & (Follower.follower_id == user_id),
-            )
-            .join(User, (User.id == Article.author_id))
-            .outerjoin(ArticleTag, Article.id == ArticleTag.article_id) # Ensure tags are joined
-            .outerjoin(Tag, Tag.id == ArticleTag.tag_id) # Ensure tags are joined
-            .group_by( # Group by all selected non-aggregated columns
-                Article.id,
-                Article.author_id,
-                Article.slug,
-                Article.title,
-                Article.description,
-                Article.body,
-                Article.created_at,
-                Article.updated_at,
-                User.id,
-                User.username,
-                User.bio,
-                User.image_url,
-            )
-            .order_by(desc(Article.created_at)) # Using desc from sqlalchemy
-            .limit(limit)
-            .offset(offset)
-        )
-        result = await session.execute(query)
-        raw_articles = result.all()
+        self, session: AsyncSession, user_id: int, limit: int = DEFAULT_ARTICLES_LIMIT, offset: int = DEFAULT_ARTICLES_OFFSET
+    ) -> ArticlesFeedDTO:
+        # Count query for total articles
+        total_articles_query = select(func.count(Article.id)).join(
+            Follower, Follower.following_id == Article.author_id
+        ).where(Follower.follower_id == user_id)
+        articles_count = (await session.execute(total_articles_query)).scalar_one()
 
-        articles_dto = [
-            await self._build_article_dto_from_db_result(session, row, user_id)
-            for row in raw_articles
-        ]
-        
-        total_count = await self.count_by_followings(session, user_id)
-        return ArticlesFeedDTO(articles=articles_dto, articles_count=total_count)
-
-
-    async def list_by_followings_v2(
-        self, session: AsyncSession, user_id: int, limit: int, offset: int
-    ) -> ArticlesFeedDTO: # Returns ArticlesFeedDTO
-        query = (
-            select(
-                Article.id.label("id"),
-                Article.author_id.label("author_id"),
-                Article.slug.label("slug"),
-                Article.title.label("title"),
-                Article.description.label("description"),
-                Article.body.label("body"),
-                Article.created_at.label("created_at"),
-                Article.updated_at.label("updated_at"),
-                User.id.label("user_id"),
-                User.username.label("username"),
-                User.bio.label("bio"),
-                User.email.label("email"),
-                User.image_url.label("image_url"),
-                true().label("following"),
-                # Subquery for favorites count.
-                select(func.count(Favorite.article_id))
-                .where(Favorite.article_id == Article.id)
-                .scalar_subquery()
-                .label("favorites_count"),
-                # Subquery to check if favorited by user with id `user_id`.
-                exists()
-                .where((Favorite.user_id == user_id) & (Favorite.article_id == Article.id))
-                .label("favorited"),
-                # Concatenate tags.
-                func.string_agg(Tag.tag, ", ").label("tags"),
-            )
-            .join(User, Article.author_id == User.id)
-            .join(ArticleTag, Article.id == ArticleTag.article_id)
-            .join(Tag, Tag.id == ArticleTag.tag_id)
-            .filter(
-                User.id.in_(
-                    select(Follower.following_id).where(Follower.follower_id == user_id).scalar_subquery()
-                )
-            )
-            .group_by(
-                Article.id,
-                Article.author_id,
-                Article.slug,
-                Article.title,
-                Article.description,
-                Article.body,
-                Article.created_at,
-                Article.updated_at,
-                User.id,
-                User.username,
-                User.bio,
-                User.email,
-                User.image_url,
-            )
-            .limit(limit)
-            .offset(offset)
-        )
-        result = await session.execute(query)
-        raw_articles = result.all()
-        
-        articles_dto = [
-            await self._build_article_dto_from_db_result(session, row, user_id)
-            for row in raw_articles
-        ]
-        
-        total_count = await self.count_by_followings(session, user_id)
-        return ArticlesFeedDTO(articles=articles_dto, articles_count=total_count)
-
-
-    async def list_by_filters(
-        self,
-        session: AsyncSession, # Add session here
-        limit: int = 20, # Use default from DTO
-        offset: int = 0, # Use default from DTO
-        tag: Optional[str] = None,
-        author: Optional[str] = None,
-        favorited: Optional[str] = None, # Consistent with DTO
-    ) -> ArticlesFeedDTO: # Returns ArticlesFeedDTO
-        # This old style query only returns basic Article fields.
-        # We need to extend it or do additional queries to get full DTO data.
-        # I'll extend it to match list_by_filters_v2 to be more efficient.
-        query = (
-            select(
-                Article.id.label("id"),
-                Article.author_id.label("author_id"),
-                Article.slug.label("slug"),
-                Article.title.label("title"),
-                Article.description.label("description"),
-                Article.body.label("body"),
-                Article.created_at.label("created_at"),
-                Article.updated_at.label("updated_at"),
-                User.id.label("user_id"),
-                User.username.label("username"),
-                User.bio.label("bio"),
-                User.image_url.label("image_url"),
-                # For filters, following/favorited status depends on a potential user_id.
-                # Assuming no specific user is logged in for this method, these will be False.
-                # Or, you might pass an optional user_id to this method if needed.
-                # For now, will set to False or determine based on `user_id` if passed.
-                false().label("following"), # Set to false if no user_id is passed or not explicitly checking
-                select(func.count(Favorite.article_id))
-                .where(Favorite.article_id == Article.id)
-                .scalar_subquery()
-                .label("favorites_count"),
-                false().label("favorited"), # Set to false if no user_id is passed or not explicitly checking
-                func.string_agg(Tag.tag, ", ").label("tags"),
-            )
-            .outerjoin(User, Article.author_id == User.id)
-            .outerjoin(ArticleTag, Article.id == ArticleTag.article_id)
-            .outerjoin(Tag, Tag.id == ArticleTag.tag_id)
-            .outerjoin(FavoriteAlias, FavoriteAlias.article_id == Article.id)
-            .group_by(
-                Article.id,
-                Article.author_id,
-                Article.slug,
-                Article.title,
-                Article.description,
-                Article.body,
-                Article.created_at,
-                Article.updated_at,
-                User.id,
-                User.username,
-                User.bio,
-                User.image_url,
+        # Main query to fetch articles with aggregated data
+        # Use joinedload for efficient loading of related User and Tag data
+        articles_query = (
+            select(Article)
+            .join(Follower, (Follower.following_id == Article.author_id) & (Follower.follower_id == user_id))
+            .options(
+                joinedload(Article.author), # Load the author (User)
+                joinedload(Article.article_tags).joinedload(ArticleTag.tag_obj) # Load tags
             )
             .order_by(desc(Article.created_at))
             .limit(limit)
             .offset(offset)
         )
 
-        conditions = []
-        if tag:
-            # Note: For tag filtering, if multiple tags per article, you might need `having` clause
-            # or a subquery to filter on aggregated tags if the join produces duplicates.
-            # Keeping it simple based on your original where clause logic on Tag.tag
-            conditions.append(Tag.tag == tag)
+        articles_result = await session.execute(articles_query)
+        db_articles = articles_result.scalars().unique().all() # Use scalars().unique().all() to get Article objects
 
-        if author:
-            conditions.append(User.username == author)
+        articles_dtos: List[ArticleDTO] = []
+        for db_article in db_articles:
+            # Author DTO
+            author_dto = ArticleAuthorDTO(
+                username=db_article.author.username,
+                bio=db_article.author.bio or "",
+                image=db_article.author.image_url,
+                following=True, # Since this list is of followings
+                id=db_article.author.id,
+            )
 
-        if favorited:
-            subquery = select(User.id).where(User.username == favorited).scalar_subquery()
-            conditions.append(FavoriteAlias.user_id == subquery)
+            # Get tags list from loaded ArticleTag objects
+            tags: List[str] = [article_tag.tag_obj.tag for article_tag in db_article.article_tags if article_tag.tag_obj]
 
-        if conditions:
-            # Apply all conditions to the query
-            query = query.where(*conditions)
+            # Query favorites count for each article
+            favorites_count_query = select(func.count(Favorite.article_id)).where(Favorite.article_id == db_article.id)
+            favorites_count = (await session.execute(favorites_count_query)).scalar_one()
 
-        result = await session.execute(query)
-        raw_articles = result.all()
+            # Check if current user favorited this article
+            is_favorited = False
+            if user_id: # Assuming user_id here is the current logged-in user
+                favorited_query = select(exists().where(
+                    and_(Favorite.user_id == user_id, Favorite.article_id == db_article.id)
+                ))
+                is_favorited = (await session.execute(favorited_query)).scalar_one()
 
-        articles_dto = [
-            await self._build_article_dto_from_db_result(session, row, user_id=None) # Pass user_id if available for 'favorited'/'following'
-            for row in raw_articles
-        ]
+            articles_dtos.append(
+                ArticleDTO(
+                    id=db_article.id,
+                    author_id=db_article.author_id,
+                    slug=db_article.slug,
+                    title=db_article.title,
+                    description=db_article.description,
+                    body=db_article.body,
+                    tags=tags,
+                    author=author_dto,
+                    createdAt=db_article.created_at,
+                    updatedAt=db_article.updated_at,
+                    favorited=is_favorited,
+                    favoritesCount=favorites_count,
+                )
+            )
 
-        total_count = await self.count_by_filters(session, tag, author, favorited)
-        return ArticlesFeedDTO(articles=articles_dto, articles_count=total_count)
+        return ArticlesFeedDTO(articles=articles_dtos, articlesCount=articles_count)
 
-
-    async def list_by_filters_v2(
+    async def list_by_filters(
         self,
         session: AsyncSession,
-        user_id: Optional[int],
-        limit: int,
-        offset: int,
+        limit: int = DEFAULT_ARTICLES_LIMIT,
+        offset: int = DEFAULT_ARTICLES_OFFSET,
         tag: Optional[str] = None,
         author: Optional[str] = None,
         favorited: Optional[str] = None,
-    ) -> ArticlesFeedDTO: # Returns ArticlesFeedDTO
-        query = (
-            select(
-                Article.id.label("id"),
-                Article.author_id.label("author_id"),
-                Article.slug.label("slug"),
-                Article.title.label("title"),
-                Article.description.label("description"),
-                Article.body.label("body"),
-                Article.created_at.label("created_at"),
-                Article.updated_at.label("updated_at"),
-                User.id.label("user_id"),
-                User.username.label("username"),
-                User.bio.label("bio"),
-                User.image_url.label("image_url"),
-                exists()
-                .where(
-                    (Follower.follower_id == user_id) & (Follower.following_id == Article.author_id)
-                )
-                .label("following") if user_id else false().label("following"), # Conditionally check or set to false
-                # Subquery for favorites count.
-                select(func.count(Favorite.article_id))
-                .where(Favorite.article_id == Article.id)
-                .scalar_subquery()
-                .label("favorites_count"),
-                # Subquery to check if favorited by user with id `user_id`.
-                exists()
-                .where((Favorite.user_id == user_id) & (Favorite.article_id == Article.id))
-                .label("favorited") if user_id else false().label("favorited"), # Conditionally check or set to false
-                # Concatenate tags.
-                func.string_agg(Tag.tag, ", ").label("tags"),
+        current_user_id: Optional[int] = None,
+    ) -> ArticlesFeedDTO:
+
+        # Base query for counting articles
+        count_query = (
+            select(func.count(Article.id))
+            .join(User, User.id == Article.author_id)
+        )
+        # Base query for fetching articles
+        articles_query = (
+            select(Article)
+            .join(User, User.id == Article.author_id)
+            .options(
+                joinedload(Article.author),
+                joinedload(Article.article_tags).joinedload(ArticleTag.tag_obj)
             )
-            .outerjoin(User, Article.author_id == User.id)
-            .outerjoin(ArticleTag, Article.id == ArticleTag.article_id)
-            .outerjoin(Tag, Tag.id == ArticleTag.tag_id)
-            .outerjoin(FavoriteAlias, FavoriteAlias.article_id == Article.id)
-            .group_by(
-                Article.id,
-                Article.author_id,
-                Article.slug,
-                Article.title,
-                Article.description,
-                Article.body,
-                Article.created_at,
-                Article.updated_at,
-                User.id,
-                User.username,
-                User.bio,
-                User.image_url,
-            )
-            .limit(limit)
-            .offset(offset)
         )
 
-        conditions = []
-        if author:
-            conditions.append(User.username == author)
+        # Apply filters to both queries
         if tag:
-            conditions.append(Tag.tag == tag)
+            count_query = count_query.join(ArticleTag, Article.id == ArticleTag.article_id).join(Tag, ArticleTag.tag_id == Tag.id).where(Tag.tag == tag)
+            articles_query = articles_query.join(ArticleTag, Article.id == ArticleTag.article_id).join(Tag, ArticleTag.tag_id == Tag.id).where(Tag.tag == tag)
+
+        if author:
+            count_query = count_query.where(User.username == author)
+            articles_query = articles_query.where(User.username == author)
+
         if favorited:
-            subquery = select(User.id).where(User.username == favorited).scalar_subquery()
-            conditions.append(FavoriteAlias.user_id == subquery)
+            favorited_user_id_query = select(User.id).where(User.username == favorited)
+            _favorited_user_id = (await session.execute(favorited_user_id_query)).scalar_one_or_none()
+            if not _favorited_user_id:
+                return ArticlesFeedDTO(articles=[], articlesCount=0) # If favorited user doesn't exist, no articles
+            
+            # Apply join for favorited filter
+            count_query = count_query.join(Favorite, (Favorite.article_id == Article.id) & (Favorite.user_id == _favorited_user_id))
+            articles_query = articles_query.join(Favorite, (Favorite.article_id == Article.id) & (Favorite.user_id == _favorited_user_id))
 
-        if conditions:
-            query = query.where(*conditions)
 
-        result = await session.execute(query)
-        raw_articles = result.all()
+        # Execute count query first
+        articles_count = (await session.execute(count_query)).scalar_one()
 
-        articles_dto = [
-            await self._build_article_dto_from_db_result(session, row, user_id)
-            for row in raw_articles
-        ]
-        
-        total_count = await self.count_by_filters(session, tag, author, favorited)
-        return ArticlesFeedDTO(articles=articles_dto, articles_count=total_count)
+        # Apply ordering and pagination for articles query
+        articles_query = articles_query.order_by(desc(Article.created_at)).limit(limit).offset(offset)
+
+        articles_result = await session.execute(articles_query)
+        db_articles = articles_result.scalars().unique().all()
+
+        articles_dtos: List[ArticleDTO] = []
+        for db_article in db_articles:
+            # Check if author is followed by current user
+            is_following_author = False
+            if current_user_id and db_article.author_id:
+                follow_check = await session.execute(
+                    select(exists().where(
+                        and_(Follower.follower_id == current_user_id, Follower.following_id == db_article.author_id)
+                    ))
+                )
+                is_following_author = follow_check.scalar_one()
+
+            author_dto = ArticleAuthorDTO(
+                username=db_article.author.username,
+                bio=db_article.author.bio or "",
+                image=db_article.author.image_url,
+                following=is_following_author,
+                id=db_article.author.id,
+            )
+
+            tags: List[str] = [article_tag.tag_obj.tag for article_tag in db_article.article_tags if article_tag.tag_obj]
+
+            # Query favorites count for each article
+            favorites_count_query = select(func.count(Favorite.article_id)).where(Favorite.article_id == db_article.id)
+            favorites_count = (await session.execute(favorites_count_query)).scalar_one()
+
+            # Check if article is favorited by current user
+            is_favorited = False
+            if current_user_id:
+                favorited_query = select(exists().where(
+                    and_(Favorite.user_id == current_user_id, Favorite.article_id == db_article.id)
+                ))
+                is_favorited = (await session.execute(favorited_query)).scalar_one()
+
+
+            articles_dtos.append(
+                ArticleDTO(
+                    id=db_article.id,
+                    author_id=db_article.author_id,
+                    slug=db_article.slug,
+                    title=db_article.title,
+                    description=db_article.description,
+                    body=db_article.body,
+                    tags=tags,
+                    author=author_dto,
+                    createdAt=db_article.created_at,
+                    updatedAt=db_article.updated_at,
+                    favorited=is_favorited,
+                    favoritesCount=favorites_count,
+                )
+            )
+
+        return ArticlesFeedDTO(articles=articles_dtos, articlesCount=articles_count)
 
 
     async def count_by_followings(self, session: AsyncSession, user_id: int) -> int:
         query = select(func.count(Article.id)).join(
-            Follower, (Follower.following_id == Article.author_id) & (Follower.follower_id == user_id)
+            Follower, and_(Follower.following_id == Article.author_id, Follower.follower_id == user_id)
         )
         result = await session.execute(query)
         return result.scalar_one()
@@ -573,20 +470,15 @@ class ArticleService:
         query = select(func.count(Article.id))
 
         if tag:
-            # Correct join on ORM models
             query = query.join(ArticleTag, Article.id == ArticleTag.article_id).join(Tag, ArticleTag.tag_id == Tag.id).where(Tag.tag == tag)
 
         if author:
-            query = query.join(User, (User.id == Article.author_id)).where(User.username == author)
+            query = query.join(User, User.id == Article.author_id).where(User.username == author)
 
         if favorited:
-            query = query.join(Favorite, (Favorite.article_id == Article.id)).where(
+            query = query.join(Favorite, Favorite.article_id == Article.id).where(
                 Favorite.user_id == select(User.id).where(User.username == favorited).scalar_subquery()
             )
 
         result = await session.execute(query)
         return result.scalar_one()
-
-    # Old helper methods are replaced by _build_article_dto_from_db_result
-    # def _build_article_schema(self, res: Any) -> ArticleSchema: ...
-    # async def _build_article_schema_with_author(self, session: AsyncSession, article: Article) -> ArticleSchema: ...

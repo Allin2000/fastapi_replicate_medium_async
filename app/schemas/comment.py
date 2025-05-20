@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import List, Optional
+import datetime
+from typing import List
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -35,12 +35,12 @@ class CommentDTO(BaseModel):
     body: str
     author:ProfileDTO
 
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    created_at: datetime.datetime = Field(alias="createdAt")
+    updated_at: datetime.datetime = Field(alias="updatedAt")
 
     model_config = ConfigDict(
         populate_by_name=True,
-        json_encoders={datetime: convert_datetime_to_realworld}
+        json_encoders={datetime.datetime: convert_datetime_to_realworld}
     )
 
 

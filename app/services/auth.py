@@ -29,7 +29,7 @@ class UserAuthService:
         self, session: AsyncSession, user_to_create:UserRegistrationDataDTO
     ) -> CreatedUserDTO:
         user = await self._user_service.add(
-            session=session, user_to_create=user_to_create
+            session=session, create_item=user_to_create
         )
         jwt_token = self._auth_token_service.generate_jwt_token(user.id, user.username)
   

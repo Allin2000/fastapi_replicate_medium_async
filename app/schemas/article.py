@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -95,14 +95,14 @@ class ArticleDTO(BaseModel):
     body: str
     tags: List[str] = Field(alias="tagList")
     author: ArticleAuthorDTO
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    created_at: datetime.datetime = Field(alias="createdAt")
+    updated_at: datetime.datetime = Field(alias="updatedAt")
     favorited: bool = False
     favorites_count: int = Field(default=0, alias="favoritesCount")
 
     model_config = ConfigDict(
         populate_by_name=True,
-        json_encoders={datetime: convert_datetime_to_realworld},
+        json_encoders={datetime.datetime: convert_datetime_to_realworld},
     )
 
 

@@ -18,7 +18,7 @@ class AppSettings(BaseAppSettings):
     title: str = response["message"]
     version: str = response["version"]
 
-    secret_key: str
+    # secret_key: str
 
     api_prefix: str = "/api/v1"
 

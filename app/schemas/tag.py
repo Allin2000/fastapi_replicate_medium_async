@@ -10,7 +10,7 @@ class TagDTO(BaseModel):
     created_at: datetime.datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Pydantic v2 正确写法
 
     @staticmethod
     def from_model(model: Tag) -> "TagDTO":

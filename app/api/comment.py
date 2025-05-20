@@ -1,19 +1,24 @@
-from fastapi import APIRouter, Path, Depends
+from fastapi import APIRouter, Path, Depends, HTTPException
 from starlette import status
 from typing import Optional
 
 from app.schemas.comment import CreateCommentRequest
 from app.schemas.comment import CommentResponse, CommentsListResponse
-from app.schemas.user import UserResponse as UserSchema
+from app.schemas.user import UserDTO
 from app.core.dep import (
     get_current_user_or_none,
     get_current_user,
     get_db_session,
-    get_CommentService
+    get_CommentService # 假设这个工厂函数现在会注入 UserService 和 FollowerService
 )
 from app.services.comment import CommentService
+from app.core.exception import ( # 导入可能抛出的新异常
+    ArticleNotFoundException,
+    CommentNotFoundException,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import logging
 
 router = APIRouter()
 
@@ -21,52 +26,91 @@ router = APIRouter()
 @router.get("/{slug}/comments", response_model=CommentsListResponse)
 async def get_comments(
     slug: str,
- session:AsyncSession=Depends(get_db_session),
-    current_user:Optional[UserSchema]=Depends(get_current_user_or_none),
-  comment_service:CommentService=Depends(get_CommentService)
+    session: AsyncSession = Depends(get_db_session),
+    current_user: Optional[UserDTO] = Depends(get_current_user_or_none),
+    comment_service: CommentService = Depends(get_CommentService)
 ) -> CommentsListResponse:
     """
-    Get comments for an article.
+    获取一篇文章的所有评论。
     """
-  
-    comment_list_dto = await comment_service.get_article_comments(
-        session=session, slug=slug, current_user=current_user
-    )
-    return CommentsListResponse.from_dto(dto=comment_list_dto)
+    try:
+        comments_list_dto = await comment_service.get_comments_for_article(
+            session=session, slug=slug, current_user=current_user
+        )
+        return CommentsListResponse.from_dto(dto=comments_list_dto)
+    except ArticleNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Article not found."
+        )
+    except Exception as e:
+        logging.error("Error getting comments for article", slug=slug, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {e}"
+        )
 
 
 @router.post("/{slug}/comments", response_model=CommentResponse)
 async def create_comment(
     slug: str,
     payload: CreateCommentRequest,
-  session:AsyncSession=Depends(get_db_session),
- current_user:UserSchema=Depends(get_current_user),
-  comment_service:CommentService=Depends(get_CommentService)
+    session: AsyncSession = Depends(get_db_session),
+    current_user: UserDTO = Depends(get_current_user), # 必须认证用户才能创建评论
+    comment_service: CommentService = Depends(get_CommentService)
 ) -> CommentResponse:
-    """ 
-    Create a comment for an article.
     """
-    comment_dto = await comment_service.create_article_comment(
-        session=session,
-        slug=slug,
-        comment_to_create=payload.to_dto(),
-        current_user=current_user,
-    )
-    return CommentResponse.from_dto(dto=comment_dto)
+    为指定文章创建一条评论。
+    """
+    try:
+        comment_dto = await comment_service.create_comment_for_article(
+            session=session,
+            slug=slug,
+            comment_to_create=payload.to_dto(), # 假设 CreateCommentRequest 有 to_dto 方法
+            current_user=current_user,
+        )
+        return CommentResponse.from_dto(dto=comment_dto)
+    except ArticleNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Article not found."
+        )
+    except Exception as e:
+        logging.error("Error creating comment for article", slug=slug, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {e}"
+        )
 
 
 @router.delete("/{slug}/comments/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(
     slug: str,
- session:AsyncSession=Depends(get_db_session),
- current_user:UserSchema=Depends(get_current_user),
-  comment_service:CommentService=Depends(get_CommentService),
+    session: AsyncSession = Depends(get_db_session),
+    current_user: UserDTO = Depends(get_current_user), # 必须认证用户才能删除评论
+    comment_service: CommentService = Depends(get_CommentService),
     comment_id: int = Path(..., alias="id"),
 ) -> None:
     """
-    Delete a comment for an article.
+    删除指定文章中的评论。
     """
-
-    await comment_service.delete_article_comment(
-        session=session, slug=slug, comment_id=comment_id, current_user=current_user
-    )
+    try:
+        await comment_service.delete_comment_from_article(
+            session=session, slug=slug, comment_id=comment_id, current_user=current_user
+        )
+    except ArticleNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Article not found."
+        )
+    except CommentNotFoundException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Comment not found."
+        )
+    except Exception as e:
+        logging.error("Error deleting comment for article", slug=slug, comment_id=comment_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {e}"
+        )

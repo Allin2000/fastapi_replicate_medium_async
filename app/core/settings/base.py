@@ -18,7 +18,7 @@ class BaseAppSettings(BaseSettings):
     Base application setting class.
     """
 
-    app_env: str = AppEnvTypes.production
+    app_env: str = AppEnvTypes.development
 
     postgres_host: str
     postgres_port: int
