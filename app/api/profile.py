@@ -15,16 +15,16 @@ from app.schemas.profile import ProfileResponse,ProfileData
 from app.schemas.user import UserDTO
 from app.services.profile import ProfileService
 
-from app.core.dep import get_current_user, get_current_user_or_none, get_db_session, get_ProfileService 
+from app.core.dep import get_current_user, get_current_user_or_none, container
 
 router = APIRouter() # 添加前缀和标签，使路由更清晰
 
 @router.get("/{username}", response_model=ProfileResponse)
 async def get_user_profile(
     username: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: Optional[UserDTO] = Depends(get_current_user_or_none),
-    profile_service: ProfileService = Depends(get_ProfileService)
+    profile_service: ProfileService = Depends(container.profile_service)
 ) -> ProfileResponse:
     """
     根据用户名获取用户资料。
@@ -60,9 +60,9 @@ async def get_user_profile(
 @router.post("/{username}/follow", response_model=ProfileResponse)
 async def follow_username(
     username: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user), # 当前用户必须存在才能关注
-    profile_service: ProfileService = Depends(get_ProfileService)
+    profile_service: ProfileService = Depends(container.profile_service)
 ) -> ProfileResponse:
     """
     关注指定用户名的资料。
@@ -110,9 +110,9 @@ async def follow_username(
 @router.delete("/{username}/follow", response_model=ProfileResponse)
 async def unfollow_username(
     username: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user), # 当前用户必须存在才能取消关注
-    profile_service: ProfileService = Depends(get_ProfileService),
+    profile_service: ProfileService = Depends(container.profile_service),
     # follower_service: FollowerService = Depends(get_FollowerService) # 不再需要直接注入 FollowerService
 ) -> ProfileResponse:
     """

@@ -3,14 +3,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.tag import TagService
 from app.schemas.tag import TagDTO
-from app.core.dep import get_db_session,get_TagService
+from app.core.dep import container
 
 router = APIRouter()
 
 
 @router.get("", response_model=list[TagDTO])
-async def get_all_tags( session:AsyncSession=Depends(get_db_session),
-                       tag_service:TagService=Depends(get_TagService)
+async def get_all_tags( session:AsyncSession=Depends(container.session),
+                       tag_service:TagService=Depends(container.tag_service)
                        ) -> TagDTO:
     """
     Return available all tags.

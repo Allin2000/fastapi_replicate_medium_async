@@ -78,14 +78,14 @@ class UserService:
             raise UserNotFoundException()
         return self._to_dto(user)
 
-    async def get_or_none(self, session: AsyncSession, user_id: int) -> Optional[UserDTO]:
+    async def get_user_by_id_or_none(self, session: AsyncSession, user_id: int) -> Optional[UserDTO]:
         query = select(User).where(User.id == user_id)
         user = await session.scalar(query)
         if not user:
             return None
         return self._to_dto(user)
 
-    async def get(self, session: AsyncSession, user_id: int) -> UserDTO:
+    async def get_user_by_id(self, session: AsyncSession, user_id: int) -> UserDTO:
         query = select(User).where(User.id == user_id)
         user = await session.scalar(query)
         if not user:

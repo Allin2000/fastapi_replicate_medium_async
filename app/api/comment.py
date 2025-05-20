@@ -8,9 +8,9 @@ from app.schemas.user import UserDTO
 from app.core.dep import (
     get_current_user_or_none,
     get_current_user,
-    get_db_session,
-    get_CommentService # 假设这个工厂函数现在会注入 UserService 和 FollowerService
+    container
 )
+
 from app.services.comment import CommentService
 from app.core.exception import ( # 导入可能抛出的新异常
     ArticleNotFoundException,
@@ -26,9 +26,9 @@ router = APIRouter()
 @router.get("/{slug}/comments", response_model=CommentsListResponse)
 async def get_comments(
     slug: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: Optional[UserDTO] = Depends(get_current_user_or_none),
-    comment_service: CommentService = Depends(get_CommentService)
+    comment_service: CommentService = Depends(container.comment_service)
 ) -> CommentsListResponse:
     """
     获取一篇文章的所有评论。
@@ -55,9 +55,9 @@ async def get_comments(
 async def create_comment(
     slug: str,
     payload: CreateCommentRequest,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user), # 必须认证用户才能创建评论
-    comment_service: CommentService = Depends(get_CommentService)
+    comment_service: CommentService = Depends(container.comment_service)
 ) -> CommentResponse:
     """
     为指定文章创建一条评论。
@@ -86,9 +86,9 @@ async def create_comment(
 @router.delete("/{slug}/comments/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(
     slug: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user), # 必须认证用户才能删除评论
-    comment_service: CommentService = Depends(get_CommentService),
+    comment_service: CommentService = Depends(container.comment_service),
     comment_id: int = Path(..., alias="id"),
 ) -> None:
     """

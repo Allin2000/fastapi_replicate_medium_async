@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.user import UserUpdateDataDTO , UserRegistrationResponse, UserDTO
 from app.services.user import UserService
-from app.core.dep import get_current_user, get_db_session, get_UserService,get_HTTPTokenHeader
+from app.core.dep import get_current_user,container,token_security
 from app.core.security import HTTPException
 
 router = APIRouter()
@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.get("", response_model=UserRegistrationResponse)
 async def get_current_user(
-    token: HTTPException=Depends(get_HTTPTokenHeader),
+    token: HTTPException=Depends(token_security),
     current_user: UserDTO = Depends(get_current_user),
 ) -> UserRegistrationResponse:
     """
@@ -27,10 +27,10 @@ async def get_current_user(
 @router.put("", response_model=UserRegistrationResponse)
 async def update_current_user(
     payload: UserUpdateDataDTO,
-    token: HTTPException=Depends(get_HTTPTokenHeader),
+    token: HTTPException=Depends(token_security),
     current_user: UserDTO = Depends(get_current_user),
-    user_service: UserService = Depends(get_UserService),
-    session: AsyncSession = Depends(get_db_session),
+    user_service: UserService = Depends(token_security),
+    session: AsyncSession = Depends(container.session),
 ) -> UserRegistrationResponse:
     """
     更新当前用户信息，并返回更新后的用户和 token。

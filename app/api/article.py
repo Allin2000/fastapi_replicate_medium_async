@@ -15,17 +15,17 @@ from app.services.article import ArticleService
 from app.services.favorite import FavoriteService
 
 
-from app.core.dep import get_db_session
-from app.core.dep import get_current_user, get_current_user_or_none, get_Article_service, get_FavoriteService # Removed get_ArticleTagService
+from app.core.dep import container
+from app.core.dep import get_current_user, get_current_user_or_none
 
 router = APIRouter()
 
 
 @router.get("/feed", response_model=ArticlesFeedDTO)
 async def get_article_feed(
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user),
-    article_service: ArticleService = Depends(get_Article_service),
+    article_service: ArticleService = Depends(container.article_service),
     limit: int = Query(20, ge=1),
     offset: int = Query(0, ge=0),
 ) -> ArticlesFeedDTO:
@@ -42,9 +42,9 @@ async def get_article_feed(
 
 @router.get("", response_model=ArticlesFeedDTO)
 async def get_global_article_feed(
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: Optional[UserDTO] = Depends(get_current_user_or_none),
-    article_service: ArticleService = Depends(get_Article_service),
+    article_service: ArticleService = Depends(container.article_service),
     tag: Optional[str] = Query(None),
     author: Optional[str] = Query(None),
     favorited: Optional[str] = Query(None),
@@ -73,9 +73,9 @@ async def get_global_article_feed(
 @router.post("", response_model=ArticleResponse)
 async def create_article(
     payload: CreateArticleDTO,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user),
-    article_service: ArticleService = Depends(get_Article_service),
+    article_service: ArticleService = Depends(container.article_service),
 ) -> ArticleResponse:
     """
     Create new article.
@@ -89,9 +89,9 @@ async def create_article(
 async def update_article(
     slug: str,
     payload: UpdateArticleDTO,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user),
-    article_service: ArticleService = Depends(get_Article_service),
+    article_service: ArticleService = Depends(container.article_service),
 ) -> ArticleResponse:
     """
     Update an article.
@@ -111,9 +111,9 @@ async def update_article(
 @router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_article(
     slug: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user),
-    article_service: ArticleService = Depends(get_Article_service),
+    article_service: ArticleService = Depends(container.article_service),
 ) -> None:
     """
     Delete an article by slug.
@@ -131,9 +131,9 @@ async def delete_article(
 @router.get("/{slug}", response_model=ArticleResponse)
 async def get_article(
     slug: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: Optional[UserDTO] = Depends(get_current_user_or_none),
-    article_service: ArticleService = Depends(get_Article_service),
+    article_service: ArticleService = Depends(container.article_service),
 ) -> ArticleResponse:
     """
     Get an article by slug.
@@ -147,10 +147,10 @@ async def get_article(
 @router.post("/{slug}/favorite", response_model=ArticleResponse)
 async def favorite_article(
     slug: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user),
-    article_service: ArticleService = Depends(get_Article_service),
-    favorite_service: FavoriteService = Depends(get_FavoriteService)
+    article_service: ArticleService = Depends(container.article_service),
+    favorite_service: FavoriteService = Depends(container.favorite_service)
 ) -> ArticleResponse:
     """
     Favorite an article.
@@ -170,10 +170,10 @@ async def favorite_article(
 @router.delete("/{slug}/favorite", response_model=ArticleResponse)
 async def unfavorite_article(
     slug: str,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user), # Should be `get_current_user` as unfavoriting requires authentication
-    article_service: ArticleService = Depends(get_Article_service),
-    favorite_service: FavoriteService = Depends(get_FavoriteService)
+    article_service: ArticleService = Depends(container.article_service),
+    favorite_service: FavoriteService = Depends(container.favorite_service)
 ) -> ArticleResponse:
     """
     Unfavorite an article.

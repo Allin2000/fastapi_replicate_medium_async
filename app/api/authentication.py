@@ -8,7 +8,7 @@ from app.schemas.user import (
     UserLoginResponse,
 )
 from app.services.auth import UserAuthService  # 正确的 service
-from app.core.dep import get_db_session,get_UserAuthService
+from app.core.dep import container
 
 router = APIRouter()
 
@@ -16,8 +16,8 @@ router = APIRouter()
 @router.post("", response_model=UserRegistrationResponse)
 async def register_user(
     payload: UserRegistrationRequest,
-    session: AsyncSession = Depends(get_db_session),
-    user_auth_service: UserAuthService = Depends(get_UserAuthService),
+    session: AsyncSession = Depends(container.session),
+    user_auth_service: UserAuthService = Depends(container.user_auth_service),
 ) -> UserRegistrationResponse:
     """
     用户注册
@@ -31,8 +31,8 @@ async def register_user(
 @router.post("/login", response_model=UserLoginResponse)
 async def login_user(
     payload: UserLoginRequest,
-    session: AsyncSession = Depends(get_db_session),
-    user_auth_service: UserAuthService = Depends(get_UserAuthService),
+    session: AsyncSession = Depends(container.session),
+    user_auth_service: UserAuthService = Depends(container.user_auth_service),
 ) -> UserLoginResponse:
     """
     用户登录

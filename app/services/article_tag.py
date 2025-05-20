@@ -4,14 +4,14 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.sqlmodel.alembic_model import ArticleTag, Tag
-from app.schemas.tag import TagDTO  # 假设你把 DTO 放在这个位置
+from app.schemas.tag import TagDTO  
 
 
 class ArticleTagService:
 
     async def add_many(
         self, session: AsyncSession, article_id: int, tags: list[str]
-    ) -> list[TagDTO]:  # ✅ 修改返回类型为 TagDTO
+    ) -> list[TagDTO]:  
         insert_tag_query = (
             insert(Tag)
             .on_conflict_do_nothing()
@@ -29,10 +29,10 @@ class ArticleTagService:
         await session.execute(insert_link_query)
         await session.commit()
 
-        # ✅ 转换为 DTO 返回
+      
         return [TagDTO.from_model(tag) for tag in tag_objects]
 
-    async def list(self, session: AsyncSession, article_id: int) -> list[TagDTO]:  # ✅ 修改返回类型
+    async def list(self, session: AsyncSession, article_id: int) -> list[TagDTO]:  
         query = (
             select(Tag)
             .join(ArticleTag, (ArticleTag.tag_id == Tag.id) & (ArticleTag.article_id == article_id))
@@ -40,4 +40,4 @@ class ArticleTagService:
         )
         result = await session.execute(query)
         tags = result.scalars().all()
-        return [TagDTO.from_model(tag) for tag in tags]  # ✅ 转换为
+        return [TagDTO.from_model(tag) for tag in tags]  
