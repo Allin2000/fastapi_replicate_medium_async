@@ -3,7 +3,7 @@ from typing import List
 
 from pydantic import BaseModel
 
-from sqlmodel.alembic_model import Tag
+from app.sqlmodel.alembic_model import Tag
 
 
 
