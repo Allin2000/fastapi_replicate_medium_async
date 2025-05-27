@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.user import UserUpdateDataDTO , CurrentUserResponse, UserDTO, UpdatedUserResponse
+from app.schemas.user import UserUpdateRequest , CurrentUserResponse, UserDTO, UpdatedUserResponse
 from app.services.user import UserService
 from app.core import dep
 
@@ -23,7 +23,7 @@ async def get_current_user(
 
 @router.put("", response_model=UpdatedUserResponse)
 async def update_current_user(
-    payload: UserUpdateDataDTO,
+    payload: UserUpdateRequest,
     token: str=Depends(dep.token_security),
     current_user: UserDTO = Depends(dep.get_current_user),
     user_service: UserService = Depends(dep.container.user_service),
@@ -36,7 +36,7 @@ async def update_current_user(
     updated_user_dto = await user_service.update(
         session=session,
         user_id=current_user.id,
-        update_item=payload
+        update_item=payload.user
     )
 
 
