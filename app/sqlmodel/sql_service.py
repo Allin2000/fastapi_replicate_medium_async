@@ -1,43 +1,51 @@
-from typing import AsyncGenerator
+# from typing import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+# from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+# from sqlalchemy.orm import sessionmaker
 
 
-from app.core.config import get_app_settings
+# from app.core.config import get_app_settings
 
-settings = get_app_settings()
 
-# 配置数据库连接 URL
-SQLALCHEMY_DATABASE_URI = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 
-# 创建异步 SQLAlchemy 引擎
-engine = create_async_engine(
-    SQLALCHEMY_DATABASE_URI,
-    echo=True,  # 是否显示 SQL 查询
-)
+# settings = get_app_settings()
 
-# 创建异步会话类
-SessionLocal = sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,  # 控制会话是否在提交时清除对象的状态
-)
+# url=settings.sql_db_uri
 
-# 创建一个 DatabaseService 类，用于管理数据库会话
-class DatabaseService:
-    def __init__(self, db_session: sessionmaker = SessionLocal):
-        """构造函数注入数据库会话工厂"""
-        self.db_session = db_session
+# print(url)
 
-    async def get_db(self) -> AsyncGenerator[AsyncSession, None]:
-        """生成异步数据库会话"""
-        async with self.db_session() as db:
-            yield db
 
-    def get_session(self) -> sessionmaker:
-        """返回数据库会话工厂"""
-        return self.db_session
+
+# # 配置数据库连接 URL
+# SQLALCHEMY_DATABASE_URI = "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+
+# # 创建异步 SQLAlchemy 引擎
+# engine = create_async_engine(
+#     SQLALCHEMY_DATABASE_URI,
+#     echo=True,  # 是否显示 SQL 查询
+# )
+
+# # 创建异步会话类
+# SessionLocal = sessionmaker(
+#     bind=engine,
+#     class_=AsyncSession,
+#     expire_on_commit=False,  # 控制会话是否在提交时清除对象的状态
+# )
+
+# # 创建一个 DatabaseService 类，用于管理数据库会话
+# class DatabaseService:
+#     def __init__(self, db_session: sessionmaker = SessionLocal):
+#         """构造函数注入数据库会话工厂"""
+#         self.db_session = db_session
+
+#     async def get_db(self) -> AsyncGenerator[AsyncSession, None]:
+#         """生成异步数据库会话"""
+#         async with self.db_session() as db:
+#             yield db
+
+#     def get_session(self) -> sessionmaker:
+#         """返回数据库会话工厂"""
+#         return self.db_session
     
 
 
