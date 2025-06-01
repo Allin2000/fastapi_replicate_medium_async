@@ -42,14 +42,27 @@ class Container:
         self._favorite_service = None
 
     @contextlib.asynccontextmanager
+    async def context_session(self) -> AsyncIterator[AsyncSession]:
+        session = self._sessionmaker()  # 修复：使用 _sessionmaker 而不是 _session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
     async def session(self) -> AsyncIterator[AsyncSession]:
-        async with self._sessionmaker() as session:
+        async with self._sessionmaker() as session:  # 修复：使用 _sessionmaker 而不是 _session
             try:
                 yield session
                 await session.commit()
             except Exception:
                 await session.rollback()
                 raise
+            finally:
+                await session.close()
 
     def auth_token_service(self) -> AuthTokenService:
         if self._auth_token_service is None:
