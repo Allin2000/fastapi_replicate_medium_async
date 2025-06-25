@@ -24,158 +24,26 @@ from app.services.follower import FollowerService
 
 
 
-class Container:
-    def __init__(self, settings: BaseAppSettings) -> None:
-        self._settings = settings
-        self._engine = create_async_engine(**settings.sqlalchemy_engine_props)
-        self._sessionmaker = async_sessionmaker(bind=self._engine, expire_on_commit=False)
-
-        # 单例缓存
-        self._auth_token_service = None
-        self._user_service = None
-        self._user_auth_service = None
-        self._follower_service = None
-        self._profile_service = None
-        self._comment_service = None
-        self._article_service = None
-        self._tag_service = None
-        self._favorite_service = None
-
-    @contextlib.asynccontextmanager
-    async def context_session(self) -> AsyncIterator[AsyncSession]:
-        session = self._sessionmaker()  # 修复：使用 _sessionmaker 而不是 _session
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
-
-    async def session(self) -> AsyncIterator[AsyncSession]:
-        async with self._sessionmaker() as session:  # 修复：使用 _sessionmaker 而不是 _session
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-            finally:
-                await session.close()
-
-    def auth_token_service(self) -> AuthTokenService:
-        if self._auth_token_service is None:
-            self._auth_token_service = AuthTokenService(
-                secret_key=self._settings.jwt_secret_key,
-                token_expiration_minutes=self._settings.jwt_token_expiration_minutes,
-                algorithm=self._settings.jwt_algorithm,
-            )
-        return self._auth_token_service
-
-    def user_service(self) -> UserService:
-        if self._user_service is None:
-            self._user_service = UserService()
-        return self._user_service
-
-    def user_auth_service(self) -> UserAuthService:
-        if self._user_auth_service is None:
-            self._user_auth_service = UserAuthService(
-                user_service=self.user_service(),
-                auth_token_service=self.auth_token_service(),
-            )
-        return self._user_auth_service
-
-    def follower_service(self) -> FollowerService:
-        if self._follower_service is None:
-            self._follower_service = FollowerService()
-        return self._follower_service
-
-    def profile_service(self) -> ProfileService:
-        if self._profile_service is None:
-            self._profile_service = ProfileService(
-                user_service=self.user_service(),
-                follower_service=self.follower_service(),
-            )
-        return self._profile_service
-
-    def comment_service(self) -> CommentService:
-        if self._comment_service is None:
-            self._comment_service = CommentService(
-                user_service=self.user_service(),
-                follower_service=self.follower_service(),
-            )
-        return self._comment_service
-
-    def article_service(self) -> ArticleService:
-        if self._article_service is None:
-            self._article_service = ArticleService()
-        return self._article_service
-
-    def tag_service(self) -> TagService:
-        if self._tag_service is None:
-            self._tag_service = TagService()
-        return self._tag_service
-
-    def favorite_service(self) -> FavoriteService:
-        if self._favorite_service is None:
-            self._favorite_service = FavoriteService()
-        return self._favorite_service
-    
-
-
-
-# @lru_cache()
-# def get_auth_token_service() -> AuthTokenService:
-#     return container.auth_token_service()
-
-# @lru_cache()
-# def get_user_service() -> UserService:
-#     return container.user_service()
-
-# @lru_cache()
-# def get_user_auth_service() -> UserAuthService:
-#     return container.user_auth_service()
-
-# @lru_cache()
-# def get_follower_service() -> FollowerService:
-#     return container.follower_service()
-
-# @lru_cache()
-# def get_profile_service() -> ProfileService:
-#     return container.profile_service()
-
-# @lru_cache()
-# def get_comment_service() -> CommentService:
-#     return container.comment_service()
-
-# @lru_cache()
-# def get_article_service() -> ArticleService:
-#     return container.article_service()
-
-# @lru_cache()
-# def get_tag_service() -> TagService:
-#     return container.tag_service()
-
-# @lru_cache()
-# def get_favorite_service() -> FavoriteService:
-#     return container.favorite_service()
-
-
-
 # class Container:
-#     """Dependency injector project container."""
-
 #     def __init__(self, settings: BaseAppSettings) -> None:
 #         self._settings = settings
 #         self._engine = create_async_engine(**settings.sqlalchemy_engine_props)
-#         self._session = async_sessionmaker(bind=self._engine, expire_on_commit=False)
+#         self._sessionmaker = async_sessionmaker(bind=self._engine, expire_on_commit=False)
 
-
+#         # 单例缓存
+#         self._auth_token_service = None
+#         self._user_service = None
+#         self._user_auth_service = None
+#         self._follower_service = None
+#         self._profile_service = None
+#         self._comment_service = None
+#         self._article_service = None
+#         self._tag_service = None
+#         self._favorite_service = None
 
 #     @contextlib.asynccontextmanager
 #     async def context_session(self) -> AsyncIterator[AsyncSession]:
-#         session = self._session()
+#         session = self._sessionmaker()  # 修复：使用 _sessionmaker 而不是 _session
 #         try:
 #             yield session
 #             await session.commit()
@@ -186,7 +54,7 @@ class Container:
 #             await session.close()
 
 #     async def session(self) -> AsyncIterator[AsyncSession]:
-#         async with self._session() as session:
+#         async with self._sessionmaker() as session:  # 修复：使用 _sessionmaker 而不是 _session
 #             try:
 #                 yield session
 #                 await session.commit()
@@ -196,61 +64,155 @@ class Container:
 #             finally:
 #                 await session.close()
 
-
- 
 #     def auth_token_service(self) -> AuthTokenService:
-#         return AuthTokenService(
-#             secret_key=self._settings.jwt_secret_key,
-#             token_expiration_minutes=self._settings.jwt_token_expiration_minutes,
-#             algorithm=self._settings.jwt_algorithm,
-#         )
-    
-
-
-#     def user_auth_service(self) -> UserAuthService:
-#         return UserAuthService(
-#             user_service=self.user_service(),
-#             auth_token_service=self.auth_token_service(),
-#         )
-    
+#         if self._auth_token_service is None:
+#             self._auth_token_service = AuthTokenService(
+#                 secret_key=self._settings.jwt_secret_key,
+#                 token_expiration_minutes=self._settings.jwt_token_expiration_minutes,
+#                 algorithm=self._settings.jwt_algorithm,
+#             )
+#         return self._auth_token_service
 
 #     def user_service(self) -> UserService:
-#         return UserService()
-    
+#         if self._user_service is None:
+#             self._user_service = UserService()
+#         return self._user_service
 
-#     def profile_service(self) -> ProfileService:
-#         return ProfileService(
-#             user_service=self.user_service(),
-#             follower_service=self.follower_service()
+#     def user_auth_service(self) -> UserAuthService:
+#         if self._user_auth_service is None:
+#             self._user_auth_service = UserAuthService(
+#                 user_service=self.user_service(),
+#                 auth_token_service=self.auth_token_service(),
 #             )
-    
-
-#     def tag_service(self) -> TagService:
-#         return TagService()
-
-
-
-#     def article_service(self) -> ArticleService:
-#         return ArticleService()
-    
-
-
-#     def comment_service(self) -> CommentService:
-#         return CommentService(
-#             user_service=self.user_service(),
-#             follower_service=self.follower_service()
-#         )
-    
+#         return self._user_auth_service
 
 #     def follower_service(self) -> FollowerService:
-#         return FollowerService()
-    
+#         if self._follower_service is None:
+#             self._follower_service = FollowerService()
+#         return self._follower_service
+
+#     def profile_service(self) -> ProfileService:
+#         if self._profile_service is None:
+#             self._profile_service = ProfileService(
+#                 user_service=self.user_service(),
+#                 follower_service=self.follower_service(),
+#             )
+#         return self._profile_service
+
+#     def comment_service(self) -> CommentService:
+#         if self._comment_service is None:
+#             self._comment_service = CommentService(
+#                 user_service=self.user_service(),
+#                 follower_service=self.follower_service(),
+#             )
+#         return self._comment_service
+
+#     def article_service(self) -> ArticleService:
+#         if self._article_service is None:
+#             self._article_service = ArticleService()
+#         return self._article_service
+
+#     def tag_service(self) -> TagService:
+#         if self._tag_service is None:
+#             self._tag_service = TagService()
+#         return self._tag_service
 
 #     def favorite_service(self) -> FavoriteService:
-#         return FavoriteService()
+#         if self._favorite_service is None:
+#             self._favorite_service = FavoriteService()
+#         return self._favorite_service
     
 
-        
+
+# container = Container(settings=get_app_settings())
+
+
+class Container:
+    """Dependency injector project container."""
+
+    def __init__(self, settings: BaseAppSettings) -> None:
+        self._settings = settings
+        self._engine = create_async_engine(**settings.sqlalchemy_engine_props)
+        self._session = async_sessionmaker(bind=self._engine, expire_on_commit=False)
+
+
+
+    @contextlib.asynccontextmanager
+    async def context_session(self) -> AsyncIterator[AsyncSession]:
+        session = self._session()
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        async with self._session() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+            finally:
+                await session.close()
+
+
+    @lru_cache(maxsize=1)
+    def auth_token_service(self) -> AuthTokenService:
+        return AuthTokenService(
+            secret_key=self._settings.jwt_secret_key,
+            token_expiration_minutes=self._settings.jwt_token_expiration_minutes,
+            algorithm=self._settings.jwt_algorithm,
+        )
+    
+
+    @lru_cache(maxsize=1)
+    def user_auth_service(self) -> UserAuthService:
+        return UserAuthService(
+            user_service=self.user_service(),
+            auth_token_service=self.auth_token_service(),
+        )
+    
+    @lru_cache(maxsize=1)
+    def user_service(self) -> UserService:
+        return UserService()
+    
+    @lru_cache(maxsize=1)
+    def profile_service(self) -> ProfileService:
+        return ProfileService(
+            user_service=self.user_service(),
+            follower_service=self.follower_service()
+            )
+    
+    @lru_cache(maxsize=1)
+    def tag_service(self) -> TagService:
+        return TagService()
+
+
+    @lru_cache(maxsize=1)
+    def article_service(self) -> ArticleService:
+        return ArticleService()
+    
+
+    @lru_cache(maxsize=1)
+    def comment_service(self) -> CommentService:
+        return CommentService(
+            user_service=self.user_service(),
+            follower_service=self.follower_service()
+        )
+    
+    @lru_cache(maxsize=1)
+    def follower_service(self) -> FollowerService:
+        return FollowerService()
+    
+    @lru_cache(maxsize=1)
+    def favorite_service(self) -> FavoriteService:
+        return FavoriteService()
+          
 container = Container(settings=get_app_settings())
 
 token_security = HTTPTokenHeader(
