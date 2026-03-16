@@ -250,7 +250,7 @@ async def get_current_user(
     user = await user_service.get_user_by_id(session=session, user_id=token_payload.user_id)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
 
@@ -259,7 +259,7 @@ async def get_current_user(
         email=user.email,
         username=user.username,
         bio=user.bio,
-        image=user.image_url,
+        image_url=user.image_url,
         password_hash=user.password_hash,
         created_at=user.created_at
     )

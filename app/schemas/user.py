@@ -1,16 +1,16 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 # 请求相关模型 ===============================
 
 #DTO改造6  请求UserRegistrationData和DTO用同一个模型
 class UserRegistrationDataDTO(BaseModel):
-    email: str
-    password: str
-    username: str
+    email: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
+    username: str = Field(..., min_length=1)
 
 # 单独请求注册数据 需提供DTO转换
 class UserRegistrationRequest(BaseModel):
@@ -23,8 +23,8 @@ class UserRegistrationRequest(BaseModel):
 # 请求模型
 #DTO改造5  请求UserLoginData和DTO用同一个模型
 class LoginUserDTO(BaseModel):
-    email: str
-    password: str
+    email: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=1)
 
 # 单独请求数据 需提供DTO转换
 class UserLoginRequest(BaseModel):
@@ -35,11 +35,25 @@ class UserLoginRequest(BaseModel):
 
 #DTO改造4  请求UserUpdateData和DTO用同一个模型
 class UserUpdateDataDTO(BaseModel):
-    email: Optional[str] = None
-    password: Optional[str] = None
-    username: Optional[str] = None
+    email: Optional[str] = Field(None, min_length=1)
+    password: Optional[str] = Field(None, min_length=1)
+    username: Optional[str] = Field(None, min_length=1)
     bio: Optional[str] = None
     image: Optional[str] = None
+
+    @field_validator("email", "password", "username")
+    @classmethod
+    def check_not_blank(cls, v: str | None) -> Optional[str]:
+        if v == "":
+            raise ValueError("can't be blank")
+        return v
+
+    @field_validator("bio", "image")
+    @classmethod
+    def empty_to_none(cls, v: str | None) -> Optional[str]:
+        if v == "":
+            return None
+        return v
 
 # 单独请求 需提供DTO转换
 class UserUpdateRequest(BaseModel):
@@ -54,7 +68,7 @@ class UserUpdateDTO(BaseModel):
     id: int
     username: str
     email: str
-    bio: str = ""
+    bio: Optional[str] = None
     image_url: Optional[str] = None
 
 
@@ -65,7 +79,7 @@ class UserDTO(BaseModel):
     username: str
     email: str
     password_hash: str
-    bio: str = ""
+    bio: Optional[str] = None
     image_url: Optional[str] = None
     created_at: datetime
 
@@ -75,18 +89,32 @@ class UserDTO(BaseModel):
 class LoggedInUserDTO(BaseModel):
     email: str
     username: str
-    bio: str = ""
+    bio: Optional[str] = None
     image: Optional[str] = None
     token: Optional[str] = None
+
+    @field_validator("bio", "image", mode="before")
+    @classmethod
+    def empty_string_to_none(cls, v: str | None) -> Optional[str]:
+        if v == "":
+            return None
+        return v
 
 #DTO改造2  响应RegisteredUserData和DTO用同一个数据模型 CurrentUserData和DTO用同一个数据模型 UpdatedUserData
 class CreatedUserDTO(BaseModel):
     id: int
     email: str
     username: str
-    bio: str = ""
+    bio: Optional[str] = None
     image: Optional[str] = None
     token: Optional[str] = None
+
+    @field_validator("bio", "image", mode="before")
+    @classmethod
+    def empty_string_to_none(cls, v: str | None) -> Optional[str]:
+        if v == "":
+            return None
+        return v
 
 
 # 响应相关模型 ===============================

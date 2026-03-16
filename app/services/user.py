@@ -32,7 +32,7 @@ class UserService:
             username=user.username,
             email=user.email,
             password_hash=user.password_hash,
-            bio=user.bio or "",
+            bio=user.bio,
             image_url=user.image_url,
             created_at=user.created_at,
         )
@@ -52,8 +52,8 @@ class UserService:
                 username=create_item.username,
                 email=create_item.email,
                 password_hash=get_password_hash(create_item.password),
-                image_url="https://api.realworld.io/images/smiley-cyrus.jpeg",
-                bio="",
+                image_url=None,
+                bio=None,
                 created_at=datetime.now(),
                 updated_at=datetime.now(),
             )
@@ -124,23 +124,18 @@ class UserService:
             if user_with_email:
                 raise EmailAlreadyTakenException()
 
+        update_data = update_item.model_dump(exclude_unset=True)
+        if "password" in update_data:
+            update_data["password_hash"] = get_password_hash(update_data.pop("password"))
+        if "image" in update_data:
+            update_data["image_url"] = update_data.pop("image")
+
         query = (
             update(User)
             .where(User.id == user_id)
-            .values(updated_at=datetime.now())
+            .values(**update_data, updated_at=datetime.now())
             .returning(User)
         )
-
-        if update_item.username is not None:
-            query = query.values(username=update_item.username)
-        if update_item.email is not None:
-            query = query.values(email=update_item.email)
-        if update_item.password is not None:
-            query = query.values(password_hash=get_password_hash(update_item.password))
-        if update_item.bio is not None:
-            query = query.values(bio=update_item.bio)
-        if update_item.image is not None:
-            query = query.values(image_url=update_item.image)
 
         result = await session.execute(query)
         await session.commit()

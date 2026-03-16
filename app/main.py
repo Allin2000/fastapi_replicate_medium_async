@@ -46,7 +46,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    application.add_middleware(RateLimitingMiddleware)
+    # application.add_middleware(RateLimitingMiddleware)
 
     application.include_router(router, prefix="/api")
 
@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
 
 
     return application
+
 
 
 app = create_app()

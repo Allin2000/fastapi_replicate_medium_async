@@ -13,7 +13,7 @@ from app.schemas.article import (
     ArticleResponse,
     ArticlesFeedDTO,
     CreateArticleRequest,
-    UpdateArticleDTO,
+    UpdateArticleRequest,
 )
 
 router = APIRouter()
@@ -68,7 +68,7 @@ async def get_global_article_feed(
 
 
 
-@router.post("", response_model=ArticleResponse)
+@router.post("", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
 async def create_article(
     payload: CreateArticleRequest,
     session: AsyncSession = Depends(container.session),
@@ -86,7 +86,7 @@ async def create_article(
 @router.put("/{slug}", response_model=ArticleResponse)
 async def update_article(
     slug: str,
-    payload: UpdateArticleDTO,
+    payload: UpdateArticleRequest,
     session: AsyncSession = Depends(container.session),
     current_user: UserDTO = Depends(get_current_user),
     article_service: ArticleService = Depends(container.article_service),
@@ -94,6 +94,10 @@ async def update_article(
     """
     Update an article.
     """
+    update_dto = payload.to_dto()
+    if "tags" in update_dto.model_fields_set and update_dto.tags is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid update payload")
+
     # First, get the article to check authorization
     existing_article = await article_service.get_by_slug(session=session, slug=slug, current_user_id=current_user.id)
     if existing_article.author.id != current_user.id: # Use existing_article.author.id since it's now populated
@@ -101,7 +105,7 @@ async def update_article(
 
     # The 'update_by_slug' method now handles tag updates and returns the full ArticleDTO
     article_dto = await article_service.update_by_slug(
-        session=session, slug=slug, update_item=payload, current_user_id=current_user.id
+        session=session, slug=slug, update_item=update_dto, current_user_id=current_user.id
     )
     return ArticleResponse(article=article_dto)
 

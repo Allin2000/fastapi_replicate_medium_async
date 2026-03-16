@@ -10,6 +10,7 @@ from app.core.exception import (
     CommentNotFoundException,
     ArticleNotFoundException, # 可能需要，如果你的路由会先根据 slug 查找文章
     UserNotFoundException, # 可能需要，如果作者不存在
+    CommentPermissionException,
 )
 from app.sqlmodel.alembic_model import Comment, Article # 导入 Article 模型
 from app.schemas.comment import (
@@ -116,7 +117,7 @@ class CommentService:
 
         if comment.author_id != current_user.id:
             # 如果不是作者，抛出未授权异常
-            raise UserNotFoundException("You are not authorized to delete this comment.")
+            raise CommentPermissionException()
 
         query = delete(Comment).where(Comment.id == comment_id)
         await session.execute(query)

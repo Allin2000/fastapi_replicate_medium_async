@@ -1,5 +1,5 @@
 import datetime
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -9,7 +9,7 @@ from app.schemas.profile import ProfileDTO
 # DTO改造 4
 # 创建评论请求体 请求CreateCommentData和DTO公用一个数据模型
 class CreateCommentDTO(BaseModel):
-    body: str
+    body: str = Field(..., min_length=1)
 
 # 单独请求 需要提供DTO转换
 class CreateCommentRequest(BaseModel):
@@ -59,8 +59,8 @@ class CommentsListDTO(BaseModel):
 # 单独响应请求
 class CommentAuthorData(BaseModel):
     username: str
-    bio: str
-    image: str | None
+    bio: Optional[str] = None
+    image: str | None = None
     following: bool
 
 # 单独响应请求

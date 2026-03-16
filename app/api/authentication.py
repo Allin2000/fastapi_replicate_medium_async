@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.auth import UserAuthService  # 正确的 service
@@ -13,7 +13,7 @@ from app.schemas.user import (
 router = APIRouter()
 
 
-@router.post("", response_model=UserRegistrationResponse)
+@router.post("", response_model=UserRegistrationResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(
     payload: UserRegistrationRequest,
     session: AsyncSession = Depends(container.session),

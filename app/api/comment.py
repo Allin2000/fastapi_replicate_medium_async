@@ -12,6 +12,7 @@ from app.services.comment import CommentService
 from app.core.exception import ( # 导入可能抛出的新异常
     ArticleNotFoundException,
     CommentNotFoundException,
+    CommentPermissionException,
                             )
 from app.core.dep import (
     get_current_user_or_none,
@@ -53,7 +54,7 @@ async def get_comments(
         )
 
 
-@router.post("/{slug}/comments", response_model=CommentResponse)
+@router.post("/{slug}/comments", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
 async def create_comment(
     slug: str,
     payload: CreateCommentRequest,
@@ -109,6 +110,11 @@ async def delete_comment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comment not found."
+        )
+    except CommentPermissionException:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this comment"
         )
     except Exception as e:
         logger.error(f"Error getting comments for article with slug: {slug}comment_id{comment_id}", exc_info=True)

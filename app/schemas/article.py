@@ -1,6 +1,6 @@
 import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from app.core.date import convert_datetime_to_realworld
 
@@ -24,10 +24,10 @@ class ArticleRecordDTO(BaseModel):
 # DTO改造5
 # 请求体（创建文章）请求CreateArticleData和DTO使用同一个数据模型
 class CreateArticleDTO(BaseModel):
-    title: str
-    description: str
-    body: str
-    tags: List[str] = Field(alias="tagList")
+    title: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
+    tags: Optional[List[str]] = Field(default_factory=list, alias="tagList")
 
 
 # 单独请求模型定义 需提供DTO转换
@@ -41,9 +41,9 @@ class CreateArticleRequest(BaseModel):
 # DTO改造6
 # 请求体（更新文章）
 class UpdateArticleDTO(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    body: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=1)
+    description: Optional[str] = Field(None, min_length=1)
+    body: Optional[str] = Field(None, min_length=1)
     tags: Optional[List[str]] = Field(default=None, alias="tagList")
 
     def with_updated_fields(self, updated_fields: dict) -> "ArticleDTO":
@@ -79,10 +79,17 @@ class ArticlesFilters(BaseModel):
 # 作者信息  响应ArticleAuthorData和DTO使用同一个数据模型
 class ArticleAuthorDTO(BaseModel):
     username: str
-    bio: str = ""
+    bio: Optional[str] = None
     image: Optional[str] = None
     following: bool = False
     id: Optional[int] = None
+
+    @field_validator("bio", "image", mode="before")
+    @classmethod
+    def empty_string_to_none(cls, v: str | None) -> Optional[str]:
+        if v == "":
+            return None
+        return v
 
 # DTO改造3
 # 单篇文章数据 响应ArticleData和DTO使用同一个数据模型
@@ -93,7 +100,7 @@ class ArticleDTO(BaseModel):
     title: str
     description: str
     body: str
-    tags: List[str] = Field(alias="tagList")
+    tags: List[str] = Field(default_factory=list, alias="tagList")
     author: ArticleAuthorDTO
     created_at: datetime.datetime = Field(alias="createdAt")
     updated_at: datetime.datetime = Field(alias="updatedAt")
@@ -105,6 +112,38 @@ class ArticleDTO(BaseModel):
         json_encoders={datetime.datetime: convert_datetime_to_realworld},
     )
 
+# DTO for listing articles (without body)
+class ArticleSummaryDTO(BaseModel):
+    author_id: int
+    slug: str
+    title: str
+    description: str
+    tags: List[str] = Field(default_factory=list, alias="tagList")
+    author: ArticleAuthorDTO
+    created_at: datetime.datetime = Field(alias="createdAt")
+    updated_at: datetime.datetime = Field(alias="updatedAt")
+    favorited: bool = False
+    favorites_count: int = Field(default=0, alias="favoritesCount")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_encoders={datetime.datetime: convert_datetime_to_realworld},
+    )
+
+    @classmethod
+    def from_article_dto(cls, article: ArticleDTO) -> "ArticleSummaryDTO":
+        return cls(
+            author_id=article.author_id,
+            slug=article.slug,
+            title=article.title,
+            description=article.description,
+            tags=article.tags,
+            author=article.author,
+            createdAt=article.created_at,
+            updatedAt=article.updated_at,
+            favorited=article.favorited,
+            favoritesCount=article.favorites_count,
+        )
 
 
 # 响应格式（单篇） 需提供DTO转换
@@ -118,13 +157,16 @@ class ArticleResponse(BaseModel):
 # DTO改造4
 # 响应格式（多篇） 响应ArticlesFeedResponse和DTO使用同一个数据 需提供DTO转换
 class ArticlesFeedDTO(BaseModel):
-    articles: List[ArticleDTO]
+    articles: List[ArticleSummaryDTO]
     articles_count: int = Field(alias="articlesCount")
 
     model_config = ConfigDict(populate_by_name=True)
 
     @classmethod
     def from_articles(cls, articles: List[ArticleDTO]) -> "ArticlesFeedDTO":
-        return cls(articles=articles, articlesCount=len(articles))
+        return cls(
+            articles=[ArticleSummaryDTO.from_article_dto(a) for a in articles],
+            articlesCount=len(articles)
+        )
 
 

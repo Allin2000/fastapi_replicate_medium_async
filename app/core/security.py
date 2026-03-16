@@ -3,7 +3,7 @@ from typing import Any
 from fastapi.security import APIKeyHeader
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.status import HTTP_403_FORBIDDEN
+from starlette.status import HTTP_401_UNAUTHORIZED
 
 
 class HTTPTokenHeader(APIKeyHeader):
@@ -18,7 +18,7 @@ class HTTPTokenHeader(APIKeyHeader):
             if not self.raise_error:
                 return ""
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN,
+                status_code=HTTP_401_UNAUTHORIZED,
                 detail="Missing authorization credentials",
             )
 
@@ -26,12 +26,12 @@ class HTTPTokenHeader(APIKeyHeader):
             token_prefix, token = api_key.split(" ")
         except ValueError:
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, detail="Invalid token schema"
+                status_code=HTTP_401_UNAUTHORIZED, detail="Invalid token schema"
             )
 
         if token_prefix.lower() != "token":
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, detail="Invalid token schema"
+                status_code=HTTP_401_UNAUTHORIZED, detail="Invalid token schema"
             )
 
         return token

@@ -60,8 +60,8 @@ class ProfileService:
     async def get_profile_by_user_id(
         self, session: AsyncSession, user_id: int, current_user: Optional[UserDTO] = None
     ) -> ProfileDTO:
-        # 修正：使用 UserService 的 get 方法
-        target_user = await self._user_service.get(session=session, user_id=user_id)
+        # 修正：使用 UserService 的 get_user_by_id 方法
+        target_user = await self._user_service.get_user_by_id(session=session, user_id=user_id)
 
         profile = ProfileDTO(
             user_id=target_user.id,
@@ -110,7 +110,10 @@ class ProfileService:
         if username == current_user.username:
             raise OwnProfileFollowingException()
 
-        target_user = await self._user_service.get_by_username(session=session, username=username)
+        try:
+            target_user = await self._user_service.get_by_username(session=session, username=username)
+        except UserNotFoundException:
+            raise ProfileNotFoundException()
 
         # 直接使用传入的 session
         if await self._follower_service.exists(session=session, follower_id=current_user.id, following_id=target_user.id):
@@ -126,7 +129,11 @@ class ProfileService:
         if username == current_user.username:
             raise OwnProfileFollowingException()
 
-        target_user = await self._user_service.get_by_username(session=session, username=username)
+        try:
+            target_user = await self._user_service.get_by_username(session=session, username=username)
+        except UserNotFoundException:
+            raise ProfileNotFoundException()
+
         # 直接使用传入的 session
         if not await self._follower_service.exists(session=session, follower_id=current_user.id, following_id=target_user.id):
             logger.exception("User not followed", username=username)

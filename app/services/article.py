@@ -3,7 +3,7 @@ from typing import  List, Optional
 
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, joinedload # Import joinedload
+from sqlalchemy.orm import aliased, selectinload # Import selectinload
 from sqlalchemy import (
     delete,
     exists,
@@ -28,6 +28,7 @@ from app.schemas.article import (
     UpdateArticleDTO,
     ArticleAuthorDTO,
     ArticleDTO,
+    ArticleSummaryDTO,
     ArticlesFeedDTO,
     DEFAULT_ARTICLES_LIMIT,
     DEFAULT_ARTICLES_OFFSET,
@@ -90,7 +91,7 @@ class ArticleService:
 
         author_dto = ArticleAuthorDTO(
             username=user.username,
-            bio=user.bio or "",
+            bio=user.bio,
             image=user.image_url, # Use image_url from User model
             following=False, # New article, author is not necessarily followed by current user
             id=user.id,
@@ -132,14 +133,12 @@ class ArticleService:
     async def get_by_slug(self, session: AsyncSession, slug: str, current_user_id: Optional[int] = None) -> ArticleDTO:
         # Load Article, its author, and tags
         stmt = select(Article).options(
-            # Assuming you have a relationship named 'author_rel' in Article model pointing to User
-            # If not, you should add one or use joinedload(User)
-            joinedload(Article.author), # Use 'author' if that's the relationship name to User
-            joinedload(Article.article_tags).joinedload(ArticleTag.tag_obj) # Load ArticleTags and then the associated Tag object
+            selectinload(Article.author),
+            selectinload(Article.article_tags).selectinload(ArticleTag.tag_obj)
         ).where(Article.slug == slug)
 
         result = await session.execute(stmt)
-        db_article = result.unique().scalar_one_or_none()
+        db_article = result.scalar_one_or_none()
 
         if not db_article:
             raise ArticleNotFoundException()
@@ -157,7 +156,7 @@ class ArticleService:
 
         author_dto = ArticleAuthorDTO(
             username=db_article.author.username, # Access username through the loaded author relationship
-            bio=db_article.author.bio or "",
+            bio=db_article.author.bio,
             image=db_article.author.image_url, # Access image_url through the loaded author relationship
             following=is_following_author,
             id=db_article.author.id,
@@ -193,7 +192,7 @@ class ArticleService:
     async def delete_by_slug(self, session: AsyncSession, slug: str) -> None:
         # Get article ID
         article_id_result = await session.execute(select(Article.id).where(Article.slug == slug))
-        article_id = article_id_result.unique().scalar_one_or_none()
+        article_id = article_id_result.scalar_one_or_none()
 
         if not article_id:
             raise ArticleNotFoundException()
@@ -283,13 +282,12 @@ class ArticleService:
         articles_count = (await session.execute(total_articles_query)).scalar_one()
 
         # Main query to fetch articles with aggregated data
-        # Use joinedload for efficient loading of related User and Tag data
         articles_query = (
             select(Article)
             .join(Follower, (Follower.following_id == Article.author_id) & (Follower.follower_id == user_id))
             .options(
-                joinedload(Article.author), # Load the author (User)
-                joinedload(Article.article_tags).joinedload(ArticleTag.tag_obj) # Load tags
+                selectinload(Article.author),
+                selectinload(Article.article_tags).selectinload(ArticleTag.tag_obj)
             )
             .order_by(desc(Article.created_at))
             .limit(limit)
@@ -297,14 +295,14 @@ class ArticleService:
         )
 
         articles_result = await session.execute(articles_query)
-        db_articles = articles_result.scalars().unique().all() # Use scalars().unique().all() to get Article objects
+        db_articles = articles_result.scalars().all()
 
         articles_dtos: List[ArticleDTO] = []
         for db_article in db_articles:
             # Author DTO
             author_dto = ArticleAuthorDTO(
                 username=db_article.author.username,
-                bio=db_article.author.bio or "",
+                bio=db_article.author.bio,
                 image=db_article.author.image_url,
                 following=True, # Since this list is of followings
                 id=db_article.author.id,
@@ -326,13 +324,11 @@ class ArticleService:
                 is_favorited = (await session.execute(favorited_query)).scalar_one()
 
             articles_dtos.append(
-                ArticleDTO(
-                    id=db_article.id,
+                ArticleSummaryDTO(
                     author_id=db_article.author_id,
                     slug=db_article.slug,
                     title=db_article.title,
                     description=db_article.description,
-                    body=db_article.body,
                     tags=tags,
                     author=author_dto,
                     createdAt=db_article.created_at,
@@ -365,8 +361,8 @@ class ArticleService:
             select(Article)
             .join(User, User.id == Article.author_id)
             .options(
-                joinedload(Article.author),
-                joinedload(Article.article_tags).joinedload(ArticleTag.tag_obj)
+                selectinload(Article.author),
+                selectinload(Article.article_tags).selectinload(ArticleTag.tag_obj)
             )
         )
 
@@ -397,7 +393,7 @@ class ArticleService:
         articles_query = articles_query.order_by(desc(Article.created_at)).limit(limit).offset(offset)
 
         articles_result = await session.execute(articles_query)
-        db_articles = articles_result.scalars().unique().all()
+        db_articles = articles_result.scalars().all()
 
         articles_dtos: List[ArticleDTO] = []
         for db_article in db_articles:
@@ -413,7 +409,7 @@ class ArticleService:
 
             author_dto = ArticleAuthorDTO(
                 username=db_article.author.username,
-                bio=db_article.author.bio or "",
+                bio=db_article.author.bio,
                 image=db_article.author.image_url,
                 following=is_following_author,
                 id=db_article.author.id,
@@ -442,13 +438,11 @@ class ArticleService:
 
 
             articles_dtos.append(
-                ArticleDTO(
-                    id=db_article.id,
+                ArticleSummaryDTO(
                     author_id=db_article.author_id,
                     slug=db_article.slug,
                     title=db_article.title,
                     description=db_article.description,
-                    body=db_article.body,
                     tags=tags,
                     author=author_dto,
                     createdAt=db_article.created_at,

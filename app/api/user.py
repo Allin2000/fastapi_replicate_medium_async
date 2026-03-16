@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from starlette import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.user import UserUpdateRequest , CurrentUserResponse, UserDTO, UpdatedUserResponse
@@ -32,12 +33,14 @@ async def update_current_user(
     """
     更新当前用户信息，并返回更新后的用户和 token。
     """
-    # 更新用户   返回的是UpdateUserDTO 
+    for field in ("email", "username", "password"):
+        if field in payload.user.model_fields_set and getattr(payload.user, field) is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid update payload")
+
     updated_user_dto = await user_service.update(
         session=session,
         user_id=current_user.id,
         update_item=payload.user
     )
-
 
     return UpdatedUserResponse.from_dto(updated_user_dto, token=token)

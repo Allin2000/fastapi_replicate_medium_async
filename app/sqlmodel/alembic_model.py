@@ -1,5 +1,6 @@
 from datetime import datetime
 from functools import partial
+from typing import Optional
 
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -19,8 +20,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(unique=True)
     email: Mapped[str] = mapped_column(unique=True)
     password_hash: Mapped[str]
-    bio: Mapped[str]
-    image_url: Mapped[str] = mapped_column(nullable=True)
+    bio: Mapped[Optional[str]] = mapped_column(nullable=True)
+    image_url: Mapped[Optional[str]] = mapped_column(nullable=True)
     created_at: Mapped[datetime]
     updated_at: Mapped[datetime] = mapped_column(nullable=True)
 

@@ -25,7 +25,7 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        client_ip = request.client.host
+        client_ip = request.client.host if request.client else "unknown"
 
         request_count, last_request = self.request_counts.get(
             client_ip, (0, datetime.min)
